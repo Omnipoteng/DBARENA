@@ -29,10 +29,13 @@ type RankTheme = {
 type SavedProfile = {
   displayName: string;
   username: string;
+  bio: string;
   avatarSrc: string;
   bannerSrc: string;
+  bannerKind: "image" | "video";
   bannerFocus: number;
   border: BorderKey;
+  tags: string[];
 };
 
 type MatchEntry = {
@@ -343,9 +346,12 @@ function EditorModal({
   mode,
   displayName,
   username,
+  bio,
   avatarSrc,
   bannerSrc,
+  bannerKind,
   bannerFocus,
+  tags,
   selectedBorder,
   onClose,
   onApply,
@@ -353,25 +359,35 @@ function EditorModal({
   mode: EditorMode;
   displayName: string;
   username: string;
+  bio: string;
   avatarSrc: string;
   bannerSrc: string;
+  bannerKind: "image" | "video";
   bannerFocus: number;
+  tags: string[];
   selectedBorder: BorderKey;
   onClose: () => void;
   onApply: (next: {
     displayName?: string;
     username?: string;
+    bio?: string;
     avatarSrc?: string;
     bannerSrc?: string;
+    bannerKind?: "image" | "video";
     bannerFocus?: number;
+    tags?: string[];
     border?: BorderKey;
   }) => void;
 }) {
   const [draftName, setDraftName] = useState(displayName);
   const [draftUsername, setDraftUsername] = useState(username);
+  const [draftBio, setDraftBio] = useState(bio);
   const [draftAvatar, setDraftAvatar] = useState(avatarSrc);
   const [draftBanner, setDraftBanner] = useState(bannerSrc);
+  const [draftBannerKind, setDraftBannerKind] = useState<"image" | "video">(bannerKind);
   const [draftBannerFocus, setDraftBannerFocus] = useState(bannerFocus);
+  const [draftTags, setDraftTags] = useState(tags);
+  const [nextTag, setNextTag] = useState("");
   const [draftBorder, setDraftBorder] = useState<BorderKey>(selectedBorder);
   const previewTheme = borderThemes[draftBorder];
 
@@ -389,10 +405,22 @@ function EditorModal({
           setDraftAvatar(reader.result);
         } else {
           setDraftBanner(reader.result);
+          setDraftBannerKind(file.type.startsWith("video/") ? "video" : "image");
         }
       }
     };
     reader.readAsDataURL(file);
+  };
+
+  const addTag = () => {
+    const value = nextTag.trim();
+    if (!value) return;
+    setDraftTags((current) => Array.from(new Set([...current, value])).slice(0, 6));
+    setNextTag("");
+  };
+
+  const removeTag = (tag: string) => {
+    setDraftTags((current) => current.filter((item) => item !== tag));
   };
 
   const focusStyle = (focus: number) => ({ objectPosition: `50% ${focus}%` });
@@ -445,15 +473,26 @@ function EditorModal({
                 <div className="flex items-stretch gap-3">
                   <div className="relative h-24 flex-1 overflow-hidden rounded-[20px] border border-black/8 bg-white">
                     {draftBanner ? (
-                      <Image
-                        src={draftBanner}
-                        alt="Banner preview"
-                        fill
-                        sizes="(max-width: 768px) 100vw, 400px"
-                        unoptimized
-                        className="object-cover"
-                        style={focusStyle(draftBannerFocus)}
-                      />
+                      draftBannerKind === "video" ? (
+                        <video
+                          src={draftBanner}
+                          className="absolute inset-0 h-full w-full object-cover"
+                          autoPlay
+                          loop
+                          muted
+                          playsInline
+                        />
+                      ) : (
+                        <Image
+                          src={draftBanner}
+                          alt="Banner preview"
+                          fill
+                          sizes="(max-width: 768px) 100vw, 400px"
+                          unoptimized
+                          className="object-cover"
+                          style={focusStyle(draftBannerFocus)}
+                        />
+                      )
                     ) : (
                       <div className="absolute inset-0 bg-[linear-gradient(135deg,_#111111_0%,_#d9d9d7_45%,_#f7f5ef_100%)]" />
                     )}
@@ -472,8 +511,8 @@ function EditorModal({
                 </div>
                 <p className="text-[10px] uppercase tracking-[0.3em] text-black/35">Geser untuk crop banner</p>
               </div>
-                <div className="flex items-center gap-4 rounded-[24px] border border-black/8 bg-black/[0.03] p-4">
-                  <div className="relative h-20 w-20 shrink-0">
+              <div className="flex items-center gap-4 rounded-[24px] border border-black/8 bg-black/[0.03] p-4">
+                <div className="relative h-20 w-20 shrink-0">
                   <ElectricBorder
                     color={previewTheme.electricColor}
                     speed={1}
@@ -507,11 +546,14 @@ function EditorModal({
                 <div className="flex h-12 items-center rounded-2xl border border-black/10 bg-white px-3">
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,video/*"
                     onChange={(event) => handleImageUpload(event, "banner")}
                     className="w-full cursor-pointer text-sm text-black/65 file:mr-4 file:rounded-full file:border-0 file:bg-black file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:opacity-90"
                   />
                 </div>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-black/35">
+                  Bisa upload foto atau video untuk banner
+                </p>
               </label>
               <label className="grid gap-2">
                 <span className="text-xs uppercase tracking-[0.3em] text-black/40">Profile photo</span>
@@ -524,6 +566,62 @@ function EditorModal({
                   />
                 </div>
               </label>
+
+              <label className="grid gap-2">
+                <span className="text-xs uppercase tracking-[0.3em] text-black/40">Bio</span>
+                <textarea
+                  value={draftBio}
+                  onChange={(event) => setDraftBio(event.target.value)}
+                  className="min-h-28 rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-black/25 focus:border-black/30"
+                  placeholder="Tulis bio profil kamu"
+                />
+              </label>
+
+              <div className="grid gap-3 rounded-[24px] border border-black/8 bg-black/[0.03] p-4">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.3em] text-black/40">Tags</p>
+                    <p className="mt-1 text-sm text-black/55">Tambah tag profil seperti lokasi, role, atau fokus debat.</p>
+                  </div>
+                  <span className="text-[10px] uppercase tracking-[0.3em] text-black/35">{draftTags.length}/6</span>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  {draftTags.map((tag) => (
+                    <button
+                      key={tag}
+                      type="button"
+                      onClick={() => removeTag(tag)}
+                      className="inline-flex items-center gap-2 rounded-full border border-black/10 bg-white px-3 py-1 text-xs text-black/75 transition hover:bg-black hover:text-white"
+                    >
+                      {tag}
+                      <span className="text-[10px]">×</span>
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    value={nextTag}
+                    onChange={(event) => setNextTag(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        addTag();
+                      }
+                    }}
+                    className="h-11 flex-1 rounded-2xl border border-black/10 bg-white px-4 text-sm text-black outline-none transition placeholder:text-black/25 focus:border-black/30"
+                    placeholder="Tambah tag baru"
+                  />
+                  <button
+                    type="button"
+                    onClick={addTag}
+                    className="inline-flex h-11 items-center justify-center rounded-2xl border border-black/10 bg-black px-4 text-sm font-semibold text-white transition hover:opacity-90"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
             </div>
           ) : null}
 
@@ -576,7 +674,14 @@ function EditorModal({
                 mode === "name"
                   ? { displayName: draftName, username: draftUsername }
                   : mode === "profile"
-                    ? { avatarSrc: draftAvatar, bannerSrc: draftBanner, bannerFocus: draftBannerFocus }
+                    ? {
+                        bio: draftBio,
+                        avatarSrc: draftAvatar,
+                        bannerSrc: draftBanner,
+                        bannerKind: draftBannerKind,
+                        bannerFocus: draftBannerFocus,
+                        tags: draftTags,
+                      }
                     : { border: draftBorder },
               );
               onClose();
@@ -593,20 +698,26 @@ function EditorModal({
 
 export default function ProfilePage() {
   const defaultProfile = {
-    displayName: "DBA Reign",
-    username: "@dba.reign",
-    avatarSrc: "/images/staff/staff-1.svg",
-    bannerSrc: "",
-    bannerFocus: 50,
-    border: "legend" as BorderKey,
-  };
+  displayName: "DBA Reign",
+  username: "@dba.reign",
+  bio: "Battleboarding profile untuk DBARENA dengan border rank, progress, dan riwayat match yang tetap terasa seperti akun kompetitif modern.",
+  avatarSrc: "/images/staff/staff-1.svg",
+  bannerSrc: "",
+  bannerKind: "image" as const,
+  bannerFocus: 50,
+  border: "legend" as BorderKey,
+  tags: ["Indonesia / Surabaya", "Scaler", "Boruto"],
+};
 
   const [displayName, setDisplayName] = useState(defaultProfile.displayName);
   const [username, setUsername] = useState(defaultProfile.username);
+  const [bio, setBio] = useState(defaultProfile.bio);
   const [avatarSrc, setAvatarSrc] = useState(defaultProfile.avatarSrc);
   const [bannerSrc, setBannerSrc] = useState(defaultProfile.bannerSrc);
+  const [bannerKind, setBannerKind] = useState<"image" | "video">(defaultProfile.bannerKind);
   const [bannerFocus, setBannerFocus] = useState(defaultProfile.bannerFocus);
   const [selectedBorder, setSelectedBorder] = useState<BorderKey>(defaultProfile.border);
+  const [tags, setTags] = useState<string[]>(defaultProfile.tags);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -627,11 +738,16 @@ export default function ProfilePage() {
         frame = window.requestAnimationFrame(() => {
           if (typeof parsed.displayName === "string") setDisplayName(parsed.displayName);
           if (typeof parsed.username === "string") setUsername(parsed.username);
+          if (typeof parsed.bio === "string") setBio(parsed.bio);
           if (typeof parsed.avatarSrc === "string") setAvatarSrc(parsed.avatarSrc);
           if (typeof parsed.bannerSrc === "string") setBannerSrc(parsed.bannerSrc);
+          if (parsed.bannerKind === "video" || parsed.bannerKind === "image") setBannerKind(parsed.bannerKind);
           if (typeof parsed.bannerFocus === "number") setBannerFocus(parsed.bannerFocus);
           if (parsed.border && ["legend", "mythic", "apex"].includes(parsed.border)) {
             setSelectedBorder(parsed.border);
+          }
+          if (Array.isArray(parsed.tags)) {
+            setTags(parsed.tags.filter((item): item is string => typeof item === "string"));
           }
           setLoaded(true);
         });
@@ -649,9 +765,19 @@ export default function ProfilePage() {
     if (!loaded) return;
     window.localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ displayName, username, avatarSrc, bannerSrc, bannerFocus, border: selectedBorder } satisfies SavedProfile),
+      JSON.stringify({
+        displayName,
+        username,
+        bio,
+        avatarSrc,
+        bannerSrc,
+        bannerKind,
+        bannerFocus,
+        border: selectedBorder,
+        tags,
+      } satisfies SavedProfile),
     );
-  }, [avatarSrc, bannerFocus, bannerSrc, displayName, loaded, selectedBorder, username]);
+  }, [avatarSrc, bannerFocus, bannerKind, bannerSrc, bio, displayName, loaded, selectedBorder, tags, username]);
 
   return (
     <div className="min-h-screen bg-[#f8f8f6] text-black">
@@ -662,15 +788,26 @@ export default function ProfilePage() {
         <section className="mt-6 overflow-hidden rounded-[32px] border border-black/8 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
           <div className="relative h-36 overflow-hidden border-b border-black/8 sm:h-44 lg:h-48">
             {bannerSrc ? (
-              <Image
-                src={bannerSrc}
-                alt="Profile banner"
-                fill
-                sizes="(max-width: 1024px) 100vw, 1280px"
-                unoptimized
-                className="object-cover"
-                style={{ objectPosition: `50% ${bannerFocus}%` }}
-              />
+              bannerKind === "video" ? (
+                <video
+                  src={bannerSrc}
+                  className="absolute inset-0 h-full w-full object-cover"
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                />
+              ) : (
+                <Image
+                  src={bannerSrc}
+                  alt="Profile banner"
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 1280px"
+                  unoptimized
+                  className="object-cover"
+                  style={{ objectPosition: `50% ${bannerFocus}%` }}
+                />
+              )
             ) : (
               <div className="absolute inset-0 bg-[linear-gradient(135deg,_#111111_0%,_#d9d9d7_45%,_#f7f5ef_100%)]" />
             )}
@@ -715,17 +852,46 @@ export default function ProfilePage() {
                     <h2 className="font-display text-3xl uppercase tracking-[0.08em] text-black sm:text-4xl">
                       {displayName}
                     </h2>
-                    <RankBadge rank={currentRank} />
+                    <div className="flex items-center gap-2">
+                      <RankBadge rank={currentRank} />
+                      <div className="relative sm:hidden">
+                        <button
+                          type="button"
+                          onClick={() => setMenuOpen((value) => !value)}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white text-lg font-semibold text-black transition hover:bg-black hover:text-white"
+                          aria-label="Open profile menu"
+                        >
+                          ⋮
+                        </button>
+
+                        {menuOpen ? (
+                          <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_24px_80px_rgba(0,0,0,0.18)]">
+                            {menuItems.map((item) => (
+                              <button
+                                key={item.label}
+                                type="button"
+                                onClick={() => {
+                                  setEditorMode(item.target);
+                                  setMenuOpen(false);
+                                }}
+                                className="flex h-11 w-full items-center rounded-2xl px-4 text-left text-sm text-black/70 transition hover:bg-black/[0.04] hover:text-black"
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
                   </div>
                   <p className="mt-1 text-sm leading-none text-black/55">{username}</p>
-                  <p className="mt-4 max-w-2xl text-sm leading-6 text-black/65">
-                    Battleboarding profile untuk DBARENA dengan border rank, progress, dan riwayat match
-                    yang tetap terasa seperti akun kompetitif modern.
-                  </p>
+                  <p className="mt-4 max-w-2xl text-sm leading-6 text-black/65">{bio}</p>
                   <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <span className="rounded-full bg-black/[0.04] px-3 py-1 text-xs text-black/70">Indonesia / Surabaya</span>
-                    <span className="rounded-full bg-black/[0.04] px-3 py-1 text-xs text-black/70">Scaler</span>
-                    <span className="rounded-full bg-black/[0.04] px-3 py-1 text-xs text-black/70">Boruto</span>
+                    {tags.map((tag) => (
+                      <span key={tag} className="rounded-full bg-black/[0.04] px-3 py-1 text-xs text-black/70">
+                        {tag}
+                      </span>
+                    ))}
                     <span className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs text-black/70">
                       Border: {borderTheme.label}
                     </span>
@@ -733,7 +899,7 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              <div className="relative self-start">
+              <div className="relative hidden self-start sm:block">
                 <button
                   type="button"
                   onClick={() => setMenuOpen((value) => !value)}
@@ -956,17 +1122,23 @@ export default function ProfilePage() {
             mode={editorMode}
             displayName={displayName}
             username={username}
+            bio={bio}
             avatarSrc={avatarSrc}
             bannerSrc={bannerSrc}
+            bannerKind={bannerKind}
             bannerFocus={bannerFocus}
+            tags={tags}
             selectedBorder={selectedBorder}
             onClose={() => setEditorMode(null)}
             onApply={(next) => {
               if (typeof next.displayName === "string") setDisplayName(next.displayName);
               if (typeof next.username === "string") setUsername(next.username);
+              if (typeof next.bio === "string") setBio(next.bio);
               if (typeof next.avatarSrc === "string") setAvatarSrc(next.avatarSrc);
               if (typeof next.bannerSrc === "string") setBannerSrc(next.bannerSrc);
+              if (next.bannerKind) setBannerKind(next.bannerKind);
               if (typeof next.bannerFocus === "number") setBannerFocus(next.bannerFocus);
+              if (Array.isArray(next.tags)) setTags(next.tags);
               if (next.border) setSelectedBorder(next.border);
             }}
           />
