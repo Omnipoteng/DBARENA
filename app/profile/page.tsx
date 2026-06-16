@@ -426,40 +426,42 @@ function EditorModal({
   const focusStyle = (focus: number) => ({ objectPosition: `50% ${focus}%` });
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-4 py-6 backdrop-blur-sm">
-      <div className="w-full max-w-xl rounded-[28px] border border-black/10 bg-white p-5 shadow-[0_30px_120px_rgba(0,0,0,0.22)]">
-        <div className="flex items-start justify-between gap-4 border-b border-black/8 pb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-6">
+      <div className="max-h-[calc(100vh-1.5rem)] w-full max-w-xl overflow-y-auto rounded-[24px] border border-black/10 bg-white p-4 shadow-[0_30px_120px_rgba(0,0,0,0.22)] sm:max-h-[calc(100vh-3rem)] sm:p-5">
+        <div className="flex items-start justify-between gap-3 border-b border-black/8 pb-4">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.45em] text-black/35">Profile settings</p>
-            <h3 className="mt-2 font-display text-3xl uppercase tracking-[0.08em] text-black">{title}</h3>
+            <p className="text-[10px] uppercase tracking-[0.4em] text-black/35 sm:text-[11px]">Profile settings</p>
+            <h3 className="mt-2 font-display text-2xl uppercase tracking-[0.08em] text-black sm:text-3xl">
+              {title}
+            </h3>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-full border border-black/10 bg-black px-3 py-2 text-sm font-semibold text-white transition hover:opacity-90"
+            className="rounded-full border border-black/10 bg-black px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90 sm:text-sm"
           >
             Close
           </button>
         </div>
 
-        <div className="mt-5">
+        <div className="mt-4 space-y-4 sm:mt-5">
           {mode === "name" ? (
             <div className="grid gap-4">
               <label className="grid gap-2">
-                <span className="text-xs uppercase tracking-[0.3em] text-black/40">Display name</span>
+                <span className="text-[10px] uppercase tracking-[0.3em] text-black/40 sm:text-xs">Display name</span>
                 <input
                   value={draftName}
                   onChange={(event) => setDraftName(event.target.value)}
-                  className="h-12 rounded-2xl border border-black/10 bg-white px-4 text-sm text-black outline-none transition placeholder:text-black/25 focus:border-black/30"
+                  className="h-11 rounded-2xl border border-black/10 bg-white px-4 text-sm text-black outline-none transition placeholder:text-black/25 focus:border-black/30 sm:h-12"
                   placeholder="Your display name"
                 />
               </label>
               <label className="grid gap-2">
-                <span className="text-xs uppercase tracking-[0.3em] text-black/40">Username</span>
+                <span className="text-[10px] uppercase tracking-[0.3em] text-black/40 sm:text-xs">Username</span>
                 <input
                   value={draftUsername}
                   onChange={(event) => setDraftUsername(event.target.value)}
-                  className="h-12 rounded-2xl border border-black/10 bg-white px-4 text-sm text-black outline-none transition placeholder:text-black/25 focus:border-black/30"
+                  className="h-11 rounded-2xl border border-black/10 bg-white px-4 text-sm text-black outline-none transition placeholder:text-black/25 focus:border-black/30 sm:h-12"
                   placeholder="@username"
                 />
               </label>
@@ -468,10 +470,10 @@ function EditorModal({
 
           {mode === "profile" ? (
             <div className="grid gap-4">
-              <div className="grid gap-2 rounded-[24px] border border-black/8 bg-black/[0.03] p-4">
-                <p className="text-[11px] uppercase tracking-[0.35em] text-black/35">Banner preview</p>
+              <div className="grid gap-2 rounded-[22px] border border-black/8 bg-black/[0.03] p-3 sm:rounded-[24px] sm:p-4">
+                <p className="text-[10px] uppercase tracking-[0.32em] text-black/35 sm:text-[11px]">Banner preview</p>
                 <div className="flex items-stretch gap-3">
-                  <div className="relative h-24 flex-1 overflow-hidden rounded-[20px] border border-black/8 bg-white">
+                  <div className="relative h-20 flex-1 overflow-hidden rounded-[18px] border border-black/8 bg-white sm:h-24 sm:rounded-[20px]">
                     {draftBanner ? (
                       draftBannerKind === "video" ? (
                         <video
@@ -504,15 +506,17 @@ function EditorModal({
                     step={1}
                     value={draftBannerFocus}
                     onChange={(event) => setDraftBannerFocus(Number(event.target.value))}
-                    className="h-24 w-8 cursor-pointer accent-black"
+                    className="h-20 w-7 cursor-pointer accent-black sm:h-24 sm:w-8"
                     aria-label="Banner crop position"
                     style={{ writingMode: "vertical-rl", direction: "rtl" }}
                   />
                 </div>
-                <p className="text-[10px] uppercase tracking-[0.3em] text-black/35">Geser untuk crop banner</p>
+                <p className="text-[9px] uppercase tracking-[0.26em] text-black/35 sm:text-[10px]">
+                  Geser untuk crop banner
+                </p>
               </div>
-              <div className="flex items-center gap-4 rounded-[24px] border border-black/8 bg-black/[0.03] p-4">
-                <div className="relative h-20 w-20 shrink-0">
+              <div className="flex items-center gap-3 rounded-[22px] border border-black/8 bg-black/[0.03] p-3 sm:gap-4 sm:rounded-[24px] sm:p-4">
+                <div className="relative h-16 w-16 shrink-0 sm:h-20 sm:w-20">
                   <ElectricBorder
                     color={previewTheme.electricColor}
                     speed={1}
@@ -535,52 +539,64 @@ function EditorModal({
                   </ElectricBorder>
                 </div>
                 <div className="min-w-0 flex-1">
-                  <p className="text-[11px] uppercase tracking-[0.35em] text-black/35">Preview</p>
+                  <p className="text-[10px] uppercase tracking-[0.32em] text-black/35 sm:text-[11px]">Preview</p>
                   <p className="mt-2 text-sm text-black/65">
                     Upload foto profile baru untuk testing border dan avatar.
                   </p>
                 </div>
               </div>
-              <label className="grid gap-2">
-                <span className="text-xs uppercase tracking-[0.3em] text-black/40">Banner photo</span>
-                <div className="flex h-12 items-center rounded-2xl border border-black/10 bg-white px-3">
+              <div className="grid gap-2">
+                <span className="text-[10px] uppercase tracking-[0.3em] text-black/40 sm:text-xs">Banner photo</span>
+                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-black/10 bg-white px-3 py-3">
+                  <span className="inline-flex h-10 items-center justify-center rounded-full bg-black px-4 text-xs font-semibold text-white">
+                    Ambil foto/video
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-black/55">
+                    {draftBanner ? "Banner sudah dipilih" : "Pilih file untuk banner"}
+                  </span>
                   <input
                     type="file"
                     accept="image/*,video/*"
                     onChange={(event) => handleImageUpload(event, "banner")}
-                    className="w-full cursor-pointer text-sm text-black/65 file:mr-4 file:rounded-full file:border-0 file:bg-black file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:opacity-90"
+                    className="sr-only"
                   />
-                </div>
+                </label>
                 <p className="text-[10px] uppercase tracking-[0.3em] text-black/35">
                   Bisa upload foto atau video untuk banner
                 </p>
-              </label>
-              <label className="grid gap-2">
-                <span className="text-xs uppercase tracking-[0.3em] text-black/40">Profile photo</span>
-                <div className="flex h-12 items-center rounded-2xl border border-black/10 bg-white px-3">
+              </div>
+              <div className="grid gap-2">
+                <span className="text-[10px] uppercase tracking-[0.3em] text-black/40 sm:text-xs">Profile photo</span>
+                <label className="flex cursor-pointer items-center gap-3 rounded-2xl border border-black/10 bg-white px-3 py-3">
+                  <span className="inline-flex h-10 items-center justify-center rounded-full bg-black px-4 text-xs font-semibold text-white">
+                    Ambil foto
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm text-black/55">
+                    {draftAvatar ? "Foto profile sudah dipilih" : "Pilih file untuk profile"}
+                  </span>
                   <input
                     type="file"
                     accept="image/*"
                     onChange={(event) => handleImageUpload(event, "avatar")}
-                    className="w-full cursor-pointer text-sm text-black/65 file:mr-4 file:rounded-full file:border-0 file:bg-black file:px-4 file:py-2 file:text-sm file:font-semibold file:text-white hover:file:opacity-90"
+                    className="sr-only"
                   />
-                </div>
-              </label>
+                </label>
+              </div>
 
               <label className="grid gap-2">
-                <span className="text-xs uppercase tracking-[0.3em] text-black/40">Bio</span>
+                <span className="text-[10px] uppercase tracking-[0.3em] text-black/40 sm:text-xs">Bio</span>
                 <textarea
                   value={draftBio}
                   onChange={(event) => setDraftBio(event.target.value)}
-                  className="min-h-28 rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-black/25 focus:border-black/30"
+                  className="min-h-24 rounded-2xl border border-black/10 bg-white px-4 py-3 text-sm text-black outline-none transition placeholder:text-black/25 focus:border-black/30 sm:min-h-28"
                   placeholder="Tulis bio profil kamu"
                 />
               </label>
 
-              <div className="grid gap-3 rounded-[24px] border border-black/8 bg-black/[0.03] p-4">
+              <div className="grid gap-3 rounded-[22px] border border-black/8 bg-black/[0.03] p-3 sm:rounded-[24px] sm:p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.3em] text-black/40">Tags</p>
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-black/40 sm:text-xs">Tags</p>
                     <p className="mt-1 text-sm text-black/55">Tambah tag profil seperti lokasi, role, atau fokus debat.</p>
                   </div>
                   <span className="text-[10px] uppercase tracking-[0.3em] text-black/35">{draftTags.length}/6</span>
@@ -610,13 +626,13 @@ function EditorModal({
                         addTag();
                       }
                     }}
-                    className="h-11 flex-1 rounded-2xl border border-black/10 bg-white px-4 text-sm text-black outline-none transition placeholder:text-black/25 focus:border-black/30"
+                    className="h-10 min-w-0 flex-1 rounded-2xl border border-black/10 bg-white px-4 text-sm text-black outline-none transition placeholder:text-black/25 focus:border-black/30 sm:h-11"
                     placeholder="Tambah tag baru"
                   />
                   <button
                     type="button"
                     onClick={addTag}
-                    className="inline-flex h-11 items-center justify-center rounded-2xl border border-black/10 bg-black px-4 text-sm font-semibold text-white transition hover:opacity-90"
+                    className="inline-flex h-10 items-center justify-center rounded-2xl border border-black/10 bg-black px-4 text-xs font-semibold text-white transition hover:opacity-90 sm:h-11 sm:text-sm"
                   >
                     Add
                   </button>
