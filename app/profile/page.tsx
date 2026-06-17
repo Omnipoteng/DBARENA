@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState, type ChangeEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import ElectricBorder from "@/components/ElectricBorder";
 import {
   getProfileBannerVideoKey,
@@ -399,6 +399,12 @@ function EditorModal({
   const [draftBorder, setDraftBorder] = useState<BorderKey>(selectedBorder);
   const [draftBannerFile, setDraftBannerFile] = useState<File | null>(null);
   const [draftBannerObjectUrl, setDraftBannerObjectUrl] = useState<string | null>(null);
+  const [uploadProgress, setUploadProgress] = useState<{
+    target: "avatar" | "banner";
+    label: string;
+    progress: number;
+  } | null>(null);
+  const progressTimersRef = useRef<number[]>([]);
   const previewTheme = borderThemes[draftBorder];
 
   const title =
@@ -407,6 +413,32 @@ function EditorModal({
   const handleImageUpload = (event: ChangeEvent<HTMLInputElement>, target: "avatar" | "banner") => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    progressTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    progressTimersRef.current = [];
+
+    const queueProgress = (updates: Array<{ delay: number; progress: number }>, done?: () => void) => {
+      setUploadProgress({
+        target,
+        label: target === "banner" ? (file.type.startsWith("video/") ? "Mengolah video banner" : "Mengunggah banner") : "Mengunggah foto profil",
+        progress: updates[0]?.progress ?? 0,
+      });
+
+      updates.forEach((update, index) => {
+        const timer = window.setTimeout(() => {
+          setUploadProgress({
+            target,
+            label: target === "banner" ? (file.type.startsWith("video/") ? "Mengolah video banner" : "Mengunggah banner") : "Mengunggah foto profil",
+            progress: update.progress,
+          });
+
+          if (index === updates.length - 1) {
+            done?.();
+          }
+        }, update.delay);
+        progressTimersRef.current.push(timer);
+      });
+    };
 
     if (target === "banner") {
       setDraftBannerFile(null);
@@ -417,14 +449,39 @@ function EditorModal({
 
     if (isVideo) {
       const previewUrl = URL.createObjectURL(file);
+      queueProgress(
+        [
+          { delay: 0, progress: 10 },
+          { delay: 160, progress: 38 },
+          { delay: 360, progress: 68 },
+          { delay: 650, progress: 100 },
+        ],
+        () => {
+          setDraftBanner(previewUrl);
+          setDraftBannerKind("video");
+          setDraftBannerFile(file);
+          setDraftBannerObjectUrl(previewUrl);
+          const doneTimer = window.setTimeout(() => setUploadProgress(null), 500);
+          progressTimersRef.current.push(doneTimer);
+        },
+      );
       setDraftBanner(previewUrl);
-      setDraftBannerKind("video");
-      setDraftBannerFile(file);
-      setDraftBannerObjectUrl(previewUrl);
       return;
     }
 
     const reader = new FileReader();
+    reader.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      const value = Math.min(95, Math.max(8, Math.round((event.loaded / event.total) * 82)));
+      setUploadProgress({
+        target,
+        label: target === "banner" ? "Mengunggah banner" : "Mengunggah foto profil",
+        progress: value,
+      });
+    };
+    reader.onerror = () => {
+      setUploadProgress(null);
+    };
     reader.onload = () => {
       if (typeof reader.result === "string") {
         if (target === "avatar") {
@@ -434,6 +491,16 @@ function EditorModal({
           setDraftBanner(reader.result);
           setDraftBannerFile(null);
         }
+        queueProgress(
+          [
+            { delay: 0, progress: 84 },
+            { delay: 220, progress: 100 },
+          ],
+          () => {
+            const doneTimer = window.setTimeout(() => setUploadProgress(null), 500);
+            progressTimersRef.current.push(doneTimer);
+          },
+        );
       }
     };
     reader.readAsDataURL(file);
@@ -457,6 +524,7 @@ function EditorModal({
       if (draftBannerObjectUrl?.startsWith("blob:")) {
         URL.revokeObjectURL(draftBannerObjectUrl);
       }
+      progressTimersRef.current.forEach((timer) => window.clearTimeout(timer));
     };
   }, [draftBannerObjectUrl]);
 
@@ -617,6 +685,23 @@ function EditorModal({
                   />
                 </label>
               </div>
+
+              {uploadProgress ? (
+                <div className="rounded-[22px] border border-black/8 bg-black/[0.03] p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[10px] uppercase tracking-[0.3em] text-black/40">{uploadProgress.label}</p>
+                    <span className="text-[10px] font-semibold tracking-[0.2em] text-black/55">
+                      {uploadProgress.progress}%
+                    </span>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/10">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-black via-slate-500 to-slate-300 transition-all duration-300"
+                      style={{ width: `${uploadProgress.progress}%` }}
+                    />
+                  </div>
+                </div>
+              ) : null}
 
               <label className="grid gap-2">
                 <span className="text-[10px] uppercase tracking-[0.3em] text-black/40 sm:text-xs">Bio</span>
