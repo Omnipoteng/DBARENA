@@ -4,6 +4,11 @@ import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, type ChangeEvent } from "react";
 import ElectricBorder from "@/components/ElectricBorder";
+import {
+  getProfileBannerVideoKey,
+  loadProfileBannerVideo,
+  saveProfileBannerVideo,
+} from "@/lib/profile-banner-store";
 import Navbar from "@/components/sections/navbar";
 
 type BorderKey = "legend" | "mythic" | "apex";
@@ -353,6 +358,7 @@ function EditorModal({
   bannerFocus,
   tags,
   selectedBorder,
+  bannerPreviewUrl,
   onClose,
   onApply,
 }: {
@@ -366,6 +372,7 @@ function EditorModal({
   bannerFocus: number;
   tags: string[];
   selectedBorder: BorderKey;
+  bannerPreviewUrl?: string | null;
   onClose: () => void;
   onApply: (next: {
     displayName?: string;
@@ -377,18 +384,21 @@ function EditorModal({
     bannerFocus?: number;
     tags?: string[];
     border?: BorderKey;
+    bannerFile?: File | null;
   }) => void;
 }) {
   const [draftName, setDraftName] = useState(displayName);
   const [draftUsername, setDraftUsername] = useState(username);
   const [draftBio, setDraftBio] = useState(bio);
   const [draftAvatar, setDraftAvatar] = useState(avatarSrc);
-  const [draftBanner, setDraftBanner] = useState(bannerSrc);
+  const [draftBanner, setDraftBanner] = useState(bannerPreviewUrl ?? (bannerKind === "video" ? "" : bannerSrc));
   const [draftBannerKind, setDraftBannerKind] = useState<"image" | "video">(bannerKind);
   const [draftBannerFocus, setDraftBannerFocus] = useState(bannerFocus);
   const [draftTags, setDraftTags] = useState(tags);
   const [nextTag, setNextTag] = useState("");
   const [draftBorder, setDraftBorder] = useState<BorderKey>(selectedBorder);
+  const [draftBannerFile, setDraftBannerFile] = useState<File | null>(null);
+  const [draftBannerObjectUrl, setDraftBannerObjectUrl] = useState<string | null>(null);
   const previewTheme = borderThemes[draftBorder];
 
   const title =
@@ -398,14 +408,31 @@ function EditorModal({
     const file = event.target.files?.[0];
     if (!file) return;
 
+    if (target === "banner") {
+      setDraftBannerFile(null);
+      setDraftBannerObjectUrl(null);
+    }
+
+    const isVideo = target === "banner" && file.type.startsWith("video/");
+
+    if (isVideo) {
+      const previewUrl = URL.createObjectURL(file);
+      setDraftBanner(previewUrl);
+      setDraftBannerKind("video");
+      setDraftBannerFile(file);
+      setDraftBannerObjectUrl(previewUrl);
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") {
         if (target === "avatar") {
           setDraftAvatar(reader.result);
         } else {
+          setDraftBannerKind("image");
           setDraftBanner(reader.result);
-          setDraftBannerKind(file.type.startsWith("video/") ? "video" : "image");
+          setDraftBannerFile(null);
         }
       }
     };
@@ -424,6 +451,14 @@ function EditorModal({
   };
 
   const focusStyle = (focus: number) => ({ objectPosition: `50% ${focus}%` });
+
+  useEffect(() => {
+    return () => {
+      if (draftBannerObjectUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(draftBannerObjectUrl);
+      }
+    };
+  }, [draftBannerObjectUrl]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/55 px-3 py-3 backdrop-blur-sm sm:px-4 sm:py-6">
@@ -683,25 +718,26 @@ function EditorModal({
           >
             Cancel
           </button>
-          <button
-            type="button"
-          onClick={() => {
-              onApply(
-                mode === "name"
+              <button
+                type="button"
+                onClick={() => {
+                  onApply(
+                    mode === "name"
                   ? { displayName: draftName, username: draftUsername }
-                  : mode === "profile"
-                    ? {
-                        bio: draftBio,
-                        avatarSrc: draftAvatar,
-                        bannerSrc: draftBanner,
-                        bannerKind: draftBannerKind,
-                        bannerFocus: draftBannerFocus,
-                        tags: draftTags,
-                      }
-                    : { border: draftBorder },
-              );
-              onClose();
-            }}
+                      : mode === "profile"
+                        ? {
+                            bio: draftBio,
+                            avatarSrc: draftAvatar,
+                            bannerSrc: draftBannerKind === "video" ? getProfileBannerVideoKey() : draftBanner,
+                            bannerKind: draftBannerKind,
+                            bannerFocus: draftBannerFocus,
+                            tags: draftTags,
+                            bannerFile: draftBannerKind === "video" ? draftBannerFile : null,
+                          }
+                        : { border: draftBorder },
+                  );
+                  onClose();
+                }}
             className="inline-flex h-11 flex-1 items-center justify-center rounded-2xl bg-black px-4 text-sm font-semibold text-white transition hover:opacity-90"
           >
             Accept
@@ -732,6 +768,7 @@ export default function ProfilePage() {
   const [bannerSrc, setBannerSrc] = useState(defaultProfile.bannerSrc);
   const [bannerKind, setBannerKind] = useState<"image" | "video">(defaultProfile.bannerKind);
   const [bannerFocus, setBannerFocus] = useState(defaultProfile.bannerFocus);
+  const [bannerPreviewUrl, setBannerPreviewUrl] = useState<string | null>(null);
   const [selectedBorder, setSelectedBorder] = useState<BorderKey>(defaultProfile.border);
   const [tags, setTags] = useState<string[]>(defaultProfile.tags);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -745,19 +782,22 @@ export default function ProfilePage() {
   const rankProgress = getRankProgress(rankedPoints);
 
   useEffect(() => {
-    let frame = 0;
+    let cancelled = false;
+    let fallbackFrame = 0;
 
-    try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Partial<SavedProfile>;
-        frame = window.requestAnimationFrame(() => {
+    const hydrateProfile = async () => {
+      try {
+        const saved = window.localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+          const parsed = JSON.parse(saved) as Partial<SavedProfile>;
+
           if (typeof parsed.displayName === "string") setDisplayName(parsed.displayName);
           if (typeof parsed.username === "string") setUsername(parsed.username);
           if (typeof parsed.bio === "string") setBio(parsed.bio);
           if (typeof parsed.avatarSrc === "string") setAvatarSrc(parsed.avatarSrc);
-          if (typeof parsed.bannerSrc === "string") setBannerSrc(parsed.bannerSrc);
-          if (parsed.bannerKind === "video" || parsed.bannerKind === "image") setBannerKind(parsed.bannerKind);
+          if (typeof parsed.bannerKind === "string" && (parsed.bannerKind === "video" || parsed.bannerKind === "image")) {
+            setBannerKind(parsed.bannerKind);
+          }
           if (typeof parsed.bannerFocus === "number") setBannerFocus(parsed.bannerFocus);
           if (parsed.border && ["legend", "mythic", "apex"].includes(parsed.border)) {
             setSelectedBorder(parsed.border);
@@ -765,35 +805,80 @@ export default function ProfilePage() {
           if (Array.isArray(parsed.tags)) {
             setTags(parsed.tags.filter((item): item is string => typeof item === "string"));
           }
-          setLoaded(true);
-        });
-        return () => window.cancelAnimationFrame(frame);
-      }
-    } catch {
-      // ignore malformed draft
-    }
 
-    frame = window.requestAnimationFrame(() => setLoaded(true));
-    return () => window.cancelAnimationFrame(frame);
+          if (typeof parsed.bannerSrc === "string") {
+            if (
+              parsed.bannerKind === "video" &&
+              parsed.bannerSrc === getProfileBannerVideoKey()
+            ) {
+              const blob = await loadProfileBannerVideo();
+              if (!cancelled) {
+                setBannerSrc(getProfileBannerVideoKey());
+                if (blob) {
+                  const objectUrl = URL.createObjectURL(blob);
+                  setBannerPreviewUrl(objectUrl);
+                }
+              }
+            } else if (parsed.bannerKind === "video" && parsed.bannerSrc.startsWith("data:video/")) {
+              const blob = await fetch(parsed.bannerSrc).then((response) => response.blob());
+              if (!cancelled) {
+                await saveProfileBannerVideo(blob);
+                const objectUrl = URL.createObjectURL(blob);
+                setBannerPreviewUrl(objectUrl);
+                setBannerSrc(getProfileBannerVideoKey());
+              }
+            } else {
+              setBannerSrc(parsed.bannerSrc);
+              setBannerPreviewUrl(null);
+            }
+          }
+        }
+      } catch {
+        // ignore malformed draft
+      }
+
+      if (!cancelled) {
+        fallbackFrame = window.requestAnimationFrame(() => setLoaded(true));
+      }
+    };
+
+    void hydrateProfile();
+
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(fallbackFrame);
+    };
   }, []);
 
   useEffect(() => {
     if (!loaded) return;
-    window.localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        displayName,
-        username,
-        bio,
-        avatarSrc,
-        bannerSrc,
-        bannerKind,
-        bannerFocus,
-        border: selectedBorder,
-        tags,
-      } satisfies SavedProfile),
-    );
+    try {
+      window.localStorage.setItem(
+        STORAGE_KEY,
+        JSON.stringify({
+          displayName,
+          username,
+          bio,
+          avatarSrc,
+          bannerSrc,
+          bannerKind,
+          bannerFocus,
+          border: selectedBorder,
+          tags,
+        } satisfies SavedProfile),
+      );
+    } catch {
+      // ignore storage quota issues so profile edits don't break
+    }
   }, [avatarSrc, bannerFocus, bannerKind, bannerSrc, bio, displayName, loaded, selectedBorder, tags, username]);
+
+  useEffect(() => {
+    return () => {
+      if (bannerPreviewUrl?.startsWith("blob:")) {
+        URL.revokeObjectURL(bannerPreviewUrl);
+      }
+    };
+  }, [bannerPreviewUrl]);
 
   return (
     <div className="min-h-screen bg-[#f8f8f6] text-black">
@@ -803,17 +888,16 @@ export default function ProfilePage() {
 
         <section className="mt-6 overflow-hidden rounded-[32px] border border-black/8 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
           <div className="relative h-36 overflow-hidden border-b border-black/8 sm:h-44 lg:h-48">
-            {bannerSrc ? (
-              bannerKind === "video" ? (
-                <video
-                  src={bannerSrc}
-                  className="absolute inset-0 h-full w-full object-cover"
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                />
-              ) : (
+            {bannerKind === "video" && bannerPreviewUrl ? (
+              <video
+                src={bannerPreviewUrl}
+                className="absolute inset-0 h-full w-full object-cover"
+                autoPlay
+                loop
+                muted
+                playsInline
+              />
+            ) : bannerSrc ? (
                 <Image
                   src={bannerSrc}
                   alt="Profile banner"
@@ -823,7 +907,6 @@ export default function ProfilePage() {
                   className="object-cover"
                   style={{ objectPosition: `50% ${bannerFocus}%` }}
                 />
-              )
             ) : (
               <div className="absolute inset-0 bg-[linear-gradient(135deg,_#111111_0%,_#d9d9d7_45%,_#f7f5ef_100%)]" />
             )}
@@ -1145,14 +1228,32 @@ export default function ProfilePage() {
             bannerFocus={bannerFocus}
             tags={tags}
             selectedBorder={selectedBorder}
+            bannerPreviewUrl={bannerPreviewUrl}
             onClose={() => setEditorMode(null)}
-            onApply={(next) => {
+            onApply={async (next) => {
               if (typeof next.displayName === "string") setDisplayName(next.displayName);
               if (typeof next.username === "string") setUsername(next.username);
               if (typeof next.bio === "string") setBio(next.bio);
               if (typeof next.avatarSrc === "string") setAvatarSrc(next.avatarSrc);
-              if (typeof next.bannerSrc === "string") setBannerSrc(next.bannerSrc);
-              if (next.bannerKind) setBannerKind(next.bannerKind);
+              if (next.bannerKind === "video") {
+                if (next.bannerFile) {
+                  try {
+                    await saveProfileBannerVideo(next.bannerFile);
+                    const previewUrl = URL.createObjectURL(next.bannerFile);
+                    setBannerPreviewUrl(previewUrl);
+                    setBannerSrc(getProfileBannerVideoKey());
+                    setBannerKind("video");
+                  } catch {
+                    // Keep the profile usable even if IndexedDB is not available.
+                  }
+                } else {
+                  setBannerKind("video");
+                }
+              } else if (typeof next.bannerSrc === "string") {
+                setBannerSrc(next.bannerSrc);
+                setBannerPreviewUrl(null);
+                setBannerKind("image");
+              }
               if (typeof next.bannerFocus === "number") setBannerFocus(next.bannerFocus);
               if (Array.isArray(next.tags)) setTags(next.tags);
               if (next.border) setSelectedBorder(next.border);
