@@ -414,6 +414,7 @@ function EditorModal({
   const [nextTag, setNextTag] = useState("");
   const [draftBorder, setDraftBorder] = useState<BorderKey>(selectedBorder);
   const [draftBannerFile, setDraftBannerFile] = useState<File | null>(null);
+  const draftBannerFileRef = useRef<File | null>(null); // always holds the latest value, safe to read in async closures
   const [draftBannerObjectUrl, setDraftBannerObjectUrl] = useState<string | null>(null);
   const [cropTargetUrl, setCropTargetUrl] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -462,6 +463,7 @@ function EditorModal({
 
     if (target === "banner") {
       setDraftBannerFile(null);
+      draftBannerFileRef.current = null;
       setDraftBannerObjectUrl(null);
     }
 
@@ -486,6 +488,7 @@ function EditorModal({
           const previewUrl = URL.createObjectURL(file);
           setDraftBannerKind("video");
           setDraftBannerFile(file);
+          draftBannerFileRef.current = file; // update ref immediately so onCropVideo closure sees the correct file
           setCropTargetUrl(previewUrl);
         }
       };
@@ -790,8 +793,9 @@ function EditorModal({
                     setCropTargetUrl(null);
                     // Store crop params; original file remains untouched (no re-encoding).
                     setDraftBannerCrop({ x: cropX, y: cropY, zoom: cropZoom });
-                    if (draftBannerFile) {
-                      const previewUrl = URL.createObjectURL(draftBannerFile);
+                    const file = draftBannerFileRef.current; // use ref to avoid stale closure
+                    if (file) {
+                      const previewUrl = URL.createObjectURL(file);
                       setDraftBanner(previewUrl);
                       setDraftBannerObjectUrl(previewUrl);
                     }
@@ -914,7 +918,7 @@ function EditorModal({
                             bannerFocus: draftBannerFocus,
                             bannerCrop: draftBannerCrop,
                             tags: draftTags,
-                            bannerFile: draftBannerKind === "video" ? draftBannerFile : null,
+                            bannerFile: draftBannerKind === "video" ? draftBannerFileRef.current : null,
                           }
                         : { border: draftBorder },
                   );
