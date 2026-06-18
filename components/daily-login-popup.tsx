@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DBA_TOKEN_KEYS,
   formatTokenNumber,
@@ -27,7 +27,11 @@ const REWARDS: RewardItem[] = [
   { day: 7, label: "Elite Tag", detail: "Tag premium lebih bagus dari hari ke-4.", type: "tag", tag: "DBA Elite Tag" },
 ];
 
-function getWibDateKey(date = new Date()) {
+// ---------------------------------------------------------------------------
+// Date helpers (WIB / Asia-Jakarta)
+// ---------------------------------------------------------------------------
+
+function getWibDateKey(date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Jakarta",
     year: "numeric",
@@ -36,105 +40,148 @@ function getWibDateKey(date = new Date()) {
   }).format(date);
 }
 
-function getWibDateKeyOffset(offsetDays: number) {
-  const date = new Date();
-  date.setDate(date.getDate() + offsetDays);
-  return getWibDateKey(date);
+function getWibYesterdayKey(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return getWibDateKey(d);
 }
 
-function clampDay(value: number) {
+function clampDay(value: number): number {
   if (!Number.isFinite(value)) return 0;
   return Math.max(0, Math.min(7, Math.trunc(value)));
 }
 
+// ---------------------------------------------------------------------------
+// localStorage helpers — single source of truth for claim persistence
+// ---------------------------------------------------------------------------
+
+/**
+ * Read the saved claim state from localStorage.
+ * Returns null if the user has not claimed today or their streak is broken.
+ */
+function readClaimState(): { claimDate: string; streakDay: number } | null {
+  if (typeof window === "undefined") return null;
+
+  const storedDate = window.localStorage.getItem(DBA_TOKEN_KEYS.claimDate) ?? "";
+  const storedDayRaw = Number(window.localStorage.getItem(DBA_TOKEN_KEYS.streakDay) ?? "0");
+  const storedDay = clampDay(storedDayRaw);
+
+  if (!storedDate) return null;
+
+  const today = getWibDateKey();
+  const yesterday = getWibYesterdayKey();
+
+  // Valid only if the last claim was today or yesterday (streak alive)
+  if (storedDate === today || storedDate === yesterday) {
+    return { claimDate: storedDate, streakDay: storedDay };
+  }
+
+  // Streak broken — reset
+  return null;
+}
+
+/**
+ * Persist the completed claim to localStorage immediately.
+ * This is the ONLY place where DBA_TOKEN_KEYS.claimDate is written after a claim.
+ */
+function persistClaimState(claimDate: string, streakDay: number): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(DBA_TOKEN_KEYS.claimDate, claimDate);
+  window.localStorage.setItem(DBA_TOKEN_KEYS.streakDay, String(streakDay));
+}
+
+/**
+ * Clear a broken streak from localStorage.
+ */
+function clearBrokenStreak(): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(DBA_TOKEN_KEYS.claimDate);
+  window.localStorage.setItem(DBA_TOKEN_KEYS.streakDay, "0");
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function DailyLoginPopup() {
   const [isOpen, setIsOpen] = useState(false);
   const [balance, setBalance] = useState(() => readTokenWallet().balance);
-  const [lastClaimDay, setLastClaimDay] = useState(() => {
-    if (typeof window === "undefined") return 0;
 
-    const storedDate = window.localStorage.getItem(DBA_TOKEN_KEYS.claimDate) ?? "";
-    const storedDayRaw = Number(window.localStorage.getItem(DBA_TOKEN_KEYS.streakDay) ?? "0");
-    const storedDay = clampDay(storedDayRaw);
-    const today = getWibDateKey();
-    const yesterday = getWibDateKeyOffset(-1);
+  // Derive initial claim state synchronously from localStorage on first mount.
+  const [claimState, setClaimState] = useState<{ claimDate: string; streakDay: number } | null>(
+    () => readClaimState()
+  );
 
-    if (storedDate === today || storedDate === yesterday) {
-      return storedDay;
-    }
+  // Stable "today" key — computed once per mount. 
+  // If the day rolls over while the popup is open the user would need to reload anyway.
+  const todayKey = useMemo(() => getWibDateKey(), []);
 
-    return 0;
-  });
-  const [lastClaimDate, setLastClaimDate] = useState(() => {
-    if (typeof window === "undefined") return "";
+  const hasClaimedToday = claimState?.claimDate === todayKey;
+  const lastClaimDay = claimState?.streakDay ?? 0;
 
-    const storedDate = window.localStorage.getItem(DBA_TOKEN_KEYS.claimDate) ?? "";
-    const today = getWibDateKey();
-    const yesterday = getWibDateKeyOffset(-1);
+  // Which day will be claimed on the next click?
+  const activeDay: number = hasClaimedToday
+    ? lastClaimDay || 1                          // already claimed — show current day
+    : lastClaimDay === 0                         // never claimed / broken streak
+      ? 1
+      : lastClaimDay >= 7
+        ? 1                                      // restart after day 7
+        : lastClaimDay + 1;
 
-    if (storedDate === today || storedDate === yesterday) {
-      return storedDate;
-    }
-
-    return "";
-  });
-  const todayKey = getWibDateKey();
-  const yesterdayKey = getWibDateKeyOffset(-1);
-  const hasClaimedToday = lastClaimDate === todayKey;
-  const activeDay = hasClaimedToday ? lastClaimDay || 1 : lastClaimDay === 0 ? 1 : lastClaimDay >= 7 ? 1 : lastClaimDay + 1;
   const currentReward = REWARDS[activeDay - 1];
 
+  // ------------------------------------------------------------------
+  // Auto-open: show popup ~1.2 s after page load IF user hasn't claimed today.
+  // ------------------------------------------------------------------
   useEffect(() => {
-    if (lastClaimDate === todayKey) return;
-
+    if (hasClaimedToday) return; // already claimed — never auto-open
     const timer = window.setTimeout(() => setIsOpen(true), 1200);
     return () => window.clearTimeout(timer);
-  }, [lastClaimDate, todayKey]);
-
-  useEffect(() => {
-    function handleOpenDailyLogin() {
-      setIsOpen(true);
-    }
-
-    window.addEventListener("open-daily-login", handleOpenDailyLogin as EventListener);
-
-    return () => {
-      window.removeEventListener("open-daily-login", handleOpenDailyLogin as EventListener);
-    };
+    // Only run once on mount. todayKey and hasClaimedToday are stable for this session.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ------------------------------------------------------------------
+  // Listen for manual "open-daily-login" custom event (e.g. from navbar button).
+  // ------------------------------------------------------------------
+  useEffect(() => {
+    const handler = () => setIsOpen(true);
+    window.addEventListener("open-daily-login", handler);
+    return () => window.removeEventListener("open-daily-login", handler);
+  }, []);
+
+  // ------------------------------------------------------------------
+  // Body scroll lock while popup is open.
+  // ------------------------------------------------------------------
   useEffect(() => {
     if (!isOpen) {
       document.body.style.overflow = "";
       return;
     }
-
-    const previousOverflow = document.body.style.overflow;
+    const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
+    return () => { document.body.style.overflow = prev; };
   }, [isOpen]);
 
+  // ------------------------------------------------------------------
+  // Broken-streak cleanup: if localStorage has a stale date from > yesterday,
+  // wipe it so it doesn't interfere with the next claim cycle.
+  // ------------------------------------------------------------------
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    if (lastClaimDate === "" && lastClaimDay === 0) {
-      window.localStorage.removeItem(DBA_TOKEN_KEYS.claimDate);
-      window.localStorage.setItem(DBA_TOKEN_KEYS.streakDay, "0");
+    const saved = readClaimState();
+    if (!saved && window.localStorage.getItem(DBA_TOKEN_KEYS.claimDate)) {
+      // There was a stored date but it's too old — clean up.
+      clearBrokenStreak();
     }
+  // Run once on mount only.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    if (lastClaimDate !== "" && lastClaimDate !== todayKey && lastClaimDate !== yesterdayKey) {
-      window.localStorage.removeItem(DBA_TOKEN_KEYS.claimDate);
-      window.localStorage.setItem(DBA_TOKEN_KEYS.streakDay, "0");
-    }
-  }, [lastClaimDate, lastClaimDay, todayKey, yesterdayKey]);
+  if (!isOpen) return null;
 
-  if (!isOpen) {
-    return null;
-  }
-
+  // ------------------------------------------------------------------
+  // Claim handler
+  // ------------------------------------------------------------------
   const handleClaim = () => {
     if (hasClaimedToday) return;
 
@@ -145,15 +192,20 @@ export default function DailyLoginPopup() {
         ? Array.from(new Set([...wallet.unlocks, currentReward.tag]))
         : wallet.unlocks;
 
+    // 1. Write token wallet (balance, unlocks, history).
     writeTokenWallet({
       balance: nextBalance,
       unlocks: nextUnlocks,
       history: wallet.history,
     });
 
+    // 2. CRITICAL: persist claim date & streak to localStorage IMMEDIATELY
+    //    so that refreshes / navigations cannot trigger another claim.
+    persistClaimState(todayKey, activeDay);
+
+    // 3. Update React state so UI reflects the claim without a reload.
     setBalance(nextBalance);
-    setLastClaimDate(todayKey);
-    setLastClaimDay(activeDay);
+    setClaimState({ claimDate: todayKey, streakDay: activeDay });
   };
 
   return (
@@ -186,7 +238,7 @@ export default function DailyLoginPopup() {
             <div className="rounded-full border border-black/10 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.28em] text-black/75">
               Day {activeDay} / 7
             </div>
-              <div className="rounded-full border border-black/10 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.28em] text-black/75">
+            <div className="rounded-full border border-black/10 bg-white px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.28em] text-black/75">
               {formatTokenNumber(balance)} token
             </div>
           </div>
@@ -245,12 +297,12 @@ export default function DailyLoginPopup() {
                         <div className="mt-3 w-full">
                           {isActive && !hasClaimedToday ? (
                             <button
-                          type="button"
-                          onClick={handleClaim}
+                              type="button"
+                              onClick={handleClaim}
                               className="inline-flex h-8 w-full items-center justify-center rounded-full bg-white px-3 text-[11px] font-black uppercase tracking-[0.18em] text-black transition hover:opacity-90"
-                          >
+                            >
                               Claim
-                          </button>
+                            </button>
                           ) : (
                             <div className="inline-flex h-8 w-full items-center justify-center rounded-full border border-dashed border-black/15 px-3 text-[10px] font-semibold uppercase tracking-[0.16em] text-black/55">
                               {isClaimed ? "Claimed" : "Locked"}
