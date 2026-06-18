@@ -1,9 +1,10 @@
-﻿"use client";
+"use client";
 
 import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import ElectricBorder from "@/components/ElectricBorder";
+import ImageCropper from "@/components/ImageCropper";
 import {
   getProfileBannerVideoKey,
   loadProfileBannerVideo,
@@ -11,7 +12,7 @@ import {
 } from "@/lib/profile-banner-store";
 import Navbar from "@/components/sections/navbar";
 
-type BorderKey = "legend" | "mythic" | "apex";
+type BorderKey = "none" | "legend" | "mythic" | "apex";
 type RankKey = "Recruit" | "Challenger" | "Vanguard" | "Legend" | "Mythic" | "Apex";
 type EditorMode = "name" | "profile" | "border";
 
@@ -57,6 +58,14 @@ type MatchEntry = {
 const STORAGE_KEY = "dbarena-profile-draft";
 
 const borderThemes: Record<BorderKey, BorderTheme> = {
+  none: {
+    label: "No Border",
+    description: "Clean avatar without a border effect.",
+    ring: "linear-gradient(135deg, rgba(17,17,17,0.12), rgba(17,17,17,0.04))",
+    glow: "rgba(17, 17, 17, 0.08)",
+    electricColor: "#111111",
+    text: "text-black",
+  },
   legend: {
     label: "Legend Border",
     description: "Gold border with a prestige feel.",
@@ -340,7 +349,7 @@ function BorderSwatch({ border, active }: { border: BorderKey; active: boolean }
   const theme = borderThemes[border];
   return (
     <div className={`relative flex h-14 w-14 items-center justify-center rounded-full transition ${active ? "scale-105 ring-2 ring-black/35" : "ring-1 ring-black/10"}`}>
-      <div className="absolute inset-0 rounded-full opacity-95 blur-[1px] animate-[spin_18s_linear_infinite]" style={{ backgroundImage: theme.ring }} />
+      <div className={`absolute inset-0 rounded-full opacity-95 blur-[1px] ${border !== "none" ? "animate-[spin_18s_linear_infinite]" : ""}`} style={{ backgroundImage: theme.ring }} />
       <div className="absolute inset-[4px] rounded-full border border-black/10 bg-white" />
       <div className="relative h-6 w-6 rounded-full bg-black/10" style={{ boxShadow: `0 0 18px ${theme.glow}` }} />
     </div>
@@ -399,6 +408,7 @@ function EditorModal({
   const [draftBorder, setDraftBorder] = useState<BorderKey>(selectedBorder);
   const [draftBannerFile, setDraftBannerFile] = useState<File | null>(null);
   const [draftBannerObjectUrl, setDraftBannerObjectUrl] = useState<string | null>(null);
+  const [cropTargetUrl, setCropTargetUrl] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{
     target: "avatar" | "banner";
     label: string;
@@ -448,24 +458,150 @@ function EditorModal({
     const isVideo = target === "banner" && file.type.startsWith("video/");
 
     if (isVideo) {
-      const previewUrl = URL.createObjectURL(file);
-      queueProgress(
-        [
-          { delay: 0, progress: 10 },
-          { delay: 160, progress: 38 },
-          { delay: 360, progress: 68 },
-          { delay: 650, progress: 100 },
-        ],
-        () => {
-          setDraftBanner(previewUrl);
-          setDraftBannerKind("video");
-          setDraftBannerFile(file);
-          setDraftBannerObjectUrl(previewUrl);
-          const doneTimer = window.setTimeout(() => setUploadProgress(null), 500);
-          progressTimersRef.current.push(doneTimer);
-        },
-      );
-      setDraftBanner(previewUrl);
+      const video = document.createElement("video");
+      video.src = URL.createObjectURL(file);
+      video.muted = true;
+      video.playsInline = true;
+
+      video.style.position = "fixed";
+      video.style.top = "-9999px";
+      video.style.left = "-9999px";
+      video.style.width = "100px";
+      video.style.height = "100px";
+      document.body.appendChild(video);
+
+      const cleanupVideo = () => {
+        if (video.parentNode) {
+          document.body.removeChild(video);
+        }
+      };
+
+      video.onloadedmetadata = () => {
+        const duration = video.duration;
+
+        if (duration <= 30) {
+          const previewUrl = URL.createObjectURL(file);
+          queueProgress(
+            [
+              { delay: 0, progress: 10 },
+              { delay: 160, progress: 38 },
+              { delay: 360, progress: 68 },
+              { delay: 650, progress: 100 },
+            ],
+            () => {
+              setDraftBanner(previewUrl);
+              setDraftBannerKind("video");
+              setDraftBannerFile(file);
+              setDraftBannerObjectUrl(previewUrl);
+              cleanupVideo();
+              const doneTimer = window.setTimeout(() => setUploadProgress(null), 500);
+              progressTimersRef.current.push(doneTimer);
+            },
+          );
+        } else {
+          setUploadProgress({
+            target: "banner",
+            label: "Memotong video banner (maks. 30 detik)",
+            progress: 0,
+          });
+
+          const playbackRate = 4;
+          video.playbackRate = playbackRate;
+
+          video.play().then(() => {
+            const stream = (video as any).captureStream ? (video as any).captureStream() : (video as any).mozCaptureStream();
+
+            let mimeType = "video/webm";
+            if (MediaRecorder.isTypeSupported("video/mp4")) {
+              mimeType = "video/mp4";
+            } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9")) {
+              mimeType = "video/webm;codecs=vp9";
+            }
+
+            const mediaRecorder = new MediaRecorder(stream, { mimeType });
+            const chunks: Blob[] = [];
+
+            mediaRecorder.ondataavailable = (e) => {
+              if (e.data.size > 0) chunks.push(e.data);
+            };
+
+            const recordingDurationMs = 30000;
+            const realDurationMs = recordingDurationMs / playbackRate;
+            const startTime = Date.now();
+
+            const progressInterval = window.setInterval(() => {
+              const elapsed = Date.now() - startTime;
+              const percent = Math.min(99, Math.round((elapsed / realDurationMs) * 100));
+              setUploadProgress({
+                target: "banner",
+                label: "Memotong video banner (maks. 30 detik)",
+                progress: percent,
+              });
+            }, 100);
+
+            mediaRecorder.onstop = () => {
+              window.clearInterval(progressInterval);
+              setUploadProgress({
+                target: "banner",
+                label: "Memotong video banner (maks. 30 detik)",
+                progress: 100,
+              });
+
+              const trimmedBlob = new Blob(chunks, { type: mimeType });
+              const trimmedFile = new File([trimmedBlob], `trimmed-${file.name}`, { type: mimeType });
+              const previewUrl = URL.createObjectURL(trimmedBlob);
+
+              setDraftBanner(previewUrl);
+              setDraftBannerKind("video");
+              setDraftBannerFile(trimmedFile);
+              setDraftBannerObjectUrl(previewUrl);
+
+              video.pause();
+              URL.revokeObjectURL(video.src);
+              cleanupVideo();
+
+              const doneTimer = window.setTimeout(() => setUploadProgress(null), 500);
+              progressTimersRef.current.push(doneTimer);
+            };
+
+            mediaRecorder.start();
+
+            const stopTimeout = window.setTimeout(() => {
+              if (mediaRecorder.state !== "inactive") {
+                mediaRecorder.stop();
+              }
+            }, realDurationMs);
+
+            video.onended = () => {
+              window.clearTimeout(stopTimeout);
+              if (mediaRecorder.state !== "inactive") {
+                mediaRecorder.stop();
+              }
+            };
+          }).catch((err) => {
+            console.error("Video trimming failed:", err);
+            cleanupVideo();
+            setUploadProgress(null);
+          });
+        }
+      };
+
+      video.onerror = () => {
+        console.error("Video failed to load metadata");
+        cleanupVideo();
+        setUploadProgress(null);
+      };
+      return;
+    }
+
+    if (target === "banner") {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          setCropTargetUrl(reader.result);
+        }
+      };
+      reader.readAsDataURL(file);
       return;
     }
 
@@ -475,7 +611,7 @@ function EditorModal({
       const value = Math.min(95, Math.max(8, Math.round((event.loaded / event.total) * 82)));
       setUploadProgress({
         target,
-        label: target === "banner" ? "Mengunggah banner" : "Mengunggah foto profil",
+        label: "Mengunggah foto profil",
         progress: value,
       });
     };
@@ -484,13 +620,7 @@ function EditorModal({
     };
     reader.onload = () => {
       if (typeof reader.result === "string") {
-        if (target === "avatar") {
-          setDraftAvatar(reader.result);
-        } else {
-          setDraftBannerKind("image");
-          setDraftBanner(reader.result);
-          setDraftBannerFile(null);
-        }
+        setDraftAvatar(reader.result);
         queueProgress(
           [
             { delay: 0, progress: 84 },
@@ -575,71 +705,67 @@ function EditorModal({
             <div className="grid gap-4">
               <div className="grid gap-2 rounded-[22px] border border-black/8 bg-black/[0.03] p-3 sm:rounded-[24px] sm:p-4">
                 <p className="text-[10px] uppercase tracking-[0.32em] text-black/35 sm:text-[11px]">Banner preview</p>
-                <div className="flex items-stretch gap-3">
-                  <div className="relative h-20 flex-1 overflow-hidden rounded-[18px] border border-black/8 bg-white sm:h-24 sm:rounded-[20px]">
-                    {draftBanner ? (
-                      draftBannerKind === "video" ? (
-                        <video
-                          src={draftBanner}
-                          className="absolute inset-0 h-full w-full object-cover"
-                          autoPlay
-                          loop
-                          muted
-                          playsInline
-                        />
-                      ) : (
-                        <Image
-                          src={draftBanner}
-                          alt="Banner preview"
-                          fill
-                          sizes="(max-width: 768px) 100vw, 400px"
-                          unoptimized
-                          className="object-cover"
-                          style={focusStyle(draftBannerFocus)}
-                        />
-                      )
+                <div className="relative h-20 w-full overflow-hidden rounded-[18px] border border-black/8 bg-white sm:h-24 sm:rounded-[20px]">
+                  {draftBanner ? (
+                    draftBannerKind === "video" ? (
+                      <video
+                        src={draftBanner}
+                        className="absolute inset-0 h-full w-full object-cover"
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                      />
                     ) : (
-                      <div className="absolute inset-0 bg-[linear-gradient(135deg,_#111111_0%,_#d9d9d7_45%,_#f7f5ef_100%)]" />
-                    )}
-                  </div>
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    step={1}
-                    value={draftBannerFocus}
-                    onChange={(event) => setDraftBannerFocus(Number(event.target.value))}
-                    className="h-20 w-7 cursor-pointer accent-black sm:h-24 sm:w-8"
-                    aria-label="Banner crop position"
-                    style={{ writingMode: "vertical-rl", direction: "rtl" }}
-                  />
+                      <Image
+                        src={draftBanner}
+                        alt="Banner preview"
+                        fill
+                        sizes="(max-width: 768px) 100vw, 400px"
+                        unoptimized
+                        className="object-cover"
+                      />
+                    )
+                  ) : (
+                    <div className="absolute inset-0 bg-[linear-gradient(135deg,_#111111_0%,_#d9d9d7_45%,_#f7f5ef_100%)]" />
+                  )}
                 </div>
-                <p className="text-[9px] uppercase tracking-[0.26em] text-black/35 sm:text-[10px]">
-                  Geser untuk crop banner
-                </p>
               </div>
               <div className="flex items-center gap-3 rounded-[22px] border border-black/8 bg-black/[0.03] p-3 sm:gap-4 sm:rounded-[24px] sm:p-4">
                 <div className="relative h-16 w-16 shrink-0 sm:h-20 sm:w-20">
-                  <ElectricBorder
-                    color={previewTheme.electricColor}
-                    speed={1}
-                    chaos={0.12}
-                    borderRadius={999}
-                    className="h-full w-full"
-                  >
-                    <div className="relative h-full w-full rounded-full bg-white p-1">
-                      <div className="relative h-full w-full overflow-hidden rounded-full border border-black/10 bg-white">
-                        <Image
-                          src={draftAvatar}
-                          alt="Avatar preview"
-                          fill
-                          sizes="80px"
-                          unoptimized
-                          className="object-cover"
-                        />
-                      </div>
+                  {draftBorder === "none" ? (
+                    <div className="relative h-full w-full overflow-hidden rounded-full border border-black/10 bg-white">
+                      <Image
+                        src={draftAvatar}
+                        alt="Avatar preview"
+                        fill
+                        sizes="80px"
+                        unoptimized
+                        className="object-cover"
+                      />
                     </div>
-                  </ElectricBorder>
+                  ) : (
+                    <ElectricBorder
+                      color={previewTheme.electricColor}
+                      speed={1}
+                      chaos={0.12}
+                      borderRadius={999}
+                      className="h-full w-full"
+                    >
+                      <div className="relative h-full w-full rounded-full bg-white p-1">
+                        <div className="relative h-full w-full overflow-hidden rounded-full border border-black/10 bg-white">
+                          <Image
+                            src={draftAvatar}
+                            alt="Avatar preview"
+                            fill
+                            sizes="80px"
+                            unoptimized
+                            className="object-cover"
+                          />
+                        </div>
+                      </div>
+                    </ElectricBorder>
+                  )}
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="text-[10px] uppercase tracking-[0.32em] text-black/35 sm:text-[11px]">Preview</p>
@@ -687,20 +813,71 @@ function EditorModal({
               </div>
 
               {uploadProgress ? (
-                <div className="rounded-[22px] border border-black/8 bg-black/[0.03] p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-[10px] uppercase tracking-[0.3em] text-black/40">{uploadProgress.label}</p>
-                    <span className="text-[10px] font-semibold tracking-[0.2em] text-black/55">
-                      {uploadProgress.progress}%
-                    </span>
-                  </div>
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-black/10">
-                    <div
-                      className="h-full rounded-full bg-gradient-to-r from-black via-slate-500 to-slate-300 transition-all duration-300"
-                      style={{ width: `${uploadProgress.progress}%` }}
-                    />
+                <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 px-4 backdrop-blur-md">
+                  <div className="w-full max-w-sm rounded-[32px] border border-white/10 bg-zinc-950 p-6 text-center text-white shadow-[0_30px_100px_rgba(0,0,0,0.5)]">
+                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-white/10">
+                      <svg
+                        className="h-6 w-6 animate-bounce text-white"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"
+                        />
+                      </svg>
+                    </div>
+                    <h4 className="mt-4 font-semibold text-lg text-white">{uploadProgress.label}</h4>
+                    <p className="mt-2 text-xs text-white/55 font-normal">Harap tunggu sebentar...</p>
+                    
+                    <div className="mt-6">
+                      <div className="flex items-center justify-between text-xs text-white/70 mb-2">
+                        <span>Proses</span>
+                        <span className="font-semibold">{uploadProgress.progress}%</span>
+                      </div>
+                      <div className="h-2 overflow-hidden rounded-full bg-white/10">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-white via-zinc-400 to-zinc-600 transition-all duration-300"
+                          style={{ width: `${uploadProgress.progress}%` }}
+                        />
+                      </div>
+                    </div>
                   </div>
                 </div>
+              ) : null}
+
+              {cropTargetUrl ? (
+                <ImageCropper
+                  imageSrc={cropTargetUrl}
+                  onCancel={() => setCropTargetUrl(null)}
+                  onCrop={(croppedBase64) => {
+                    setCropTargetUrl(null);
+                    setUploadProgress({
+                      target: "banner",
+                      label: "Mengunggah hasil crop banner",
+                      progress: 0,
+                    });
+                    let progress = 0;
+                    const interval = setInterval(() => {
+                      progress += 20;
+                      setUploadProgress({
+                        target: "banner",
+                        label: "Mengunggah hasil crop banner",
+                        progress: Math.min(100, progress),
+                      });
+                      if (progress >= 100) {
+                        clearInterval(interval);
+                        setDraftBannerKind("image");
+                        setDraftBanner(croppedBase64);
+                        setDraftBannerFile(null);
+                        setTimeout(() => setUploadProgress(null), 300);
+                      }
+                    }, 60);
+                  }}
+                />
               ) : null}
 
               <label className="grid gap-2">
@@ -763,7 +940,7 @@ function EditorModal({
 
           {mode === "border" ? (
             <div className="grid gap-3">
-              {(["legend", "mythic", "apex"] as BorderKey[]).map((border) => {
+              {(["none", "legend", "mythic", "apex"] as BorderKey[]).map((border) => {
                 const theme = borderThemes[border];
                 const active = draftBorder === border;
 
@@ -884,7 +1061,7 @@ export default function ProfilePage() {
             setBannerKind(parsed.bannerKind);
           }
           if (typeof parsed.bannerFocus === "number") setBannerFocus(parsed.bannerFocus);
-          if (parsed.border && ["legend", "mythic", "apex"].includes(parsed.border)) {
+          if (parsed.border && ["none", "legend", "mythic", "apex"].includes(parsed.border)) {
             setSelectedBorder(parsed.border);
           }
           if (Array.isArray(parsed.tags)) {
@@ -990,7 +1167,7 @@ export default function ProfilePage() {
                   sizes="(max-width: 1024px) 100vw, 1280px"
                   unoptimized
                   className="object-cover"
-                  style={{ objectPosition: `50% ${bannerFocus}%` }}
+                  style={{ objectPosition: bannerSrc.startsWith("data:") ? "50% 50%" : `50% ${bannerFocus}%` }}
                 />
             ) : (
               <div className="absolute inset-0 bg-[linear-gradient(135deg,_#111111_0%,_#d9d9d7_45%,_#f7f5ef_100%)]" />
@@ -1003,29 +1180,42 @@ export default function ProfilePage() {
             <div className="-mt-14 flex flex-col gap-5 lg:-mt-18 lg:flex-row lg:items-end lg:justify-between">
               <div className="flex flex-col gap-5 lg:flex-row lg:items-end">
                 <div className="relative h-36 w-36 shrink-0 lg:h-44 lg:w-44">
-                  <ElectricBorder
-                    color={borderTheme.electricColor}
-                    speed={1}
-                    chaos={0.12}
-                    borderRadius={999}
-                    className="h-full w-full"
-                  >
-                    <div className="relative h-full w-full rounded-full bg-white p-1.5">
-                      <div className="relative h-full w-full overflow-hidden rounded-full border-[4px] border-black/12 bg-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.9)]">
-                        <Image
-                          src={avatarSrc}
-                          alt="Profile avatar preview"
-                          fill
-                          sizes="208px"
-                          unoptimized
-                          className="object-cover"
-                        />
-                      </div>
+                  {selectedBorder === "none" ? (
+                    <div className="relative h-full w-full overflow-hidden rounded-full border-[4px] border-black/12 bg-white">
+                      <Image
+                        src={avatarSrc}
+                        alt="Profile avatar preview"
+                        fill
+                        sizes="208px"
+                        unoptimized
+                        className="object-cover"
+                      />
                     </div>
-                  </ElectricBorder>
+                  ) : (
+                    <ElectricBorder
+                      color={borderTheme.electricColor}
+                      speed={1}
+                      chaos={0.12}
+                      borderRadius={999}
+                      className="h-full w-full"
+                    >
+                      <div className="relative h-full w-full rounded-full bg-white p-1.5">
+                        <div className="relative h-full w-full overflow-hidden rounded-full border-[4px] border-black/12 bg-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.9)]">
+                          <Image
+                            src={avatarSrc}
+                            alt="Profile avatar preview"
+                            fill
+                            sizes="208px"
+                            unoptimized
+                            className="object-cover"
+                          />
+                        </div>
+                      </div>
+                    </ElectricBorder>
+                  )}
                   <div
                     className="absolute -bottom-3 left-1/2 z-10 h-12 w-12 -translate-x-1/2 rounded-full border border-black/10 bg-white p-1.5 shadow-[0_12px_24px_rgba(0,0,0,0.16)]"
-                    style={{ boxShadow: `0 0 34px ${borderTheme.glow}` }}
+                    style={selectedBorder !== "none" ? { boxShadow: `0 0 34px ${borderTheme.glow}` } : undefined}
                   >
                     <RankEmblem variant={rankTheme.emblem} />
                   </div>
