@@ -420,6 +420,158 @@ function EditorModal({
   const title =
     mode === "border" ? "Kustomisasi Border" : mode === "profile" ? "Kustomisasi Profil" : "Kustomisasi Nama";
 
+  const startVideoCropAndTrim = (
+    file: File,
+    cropParams: { x: number; y: number; scale: number; cropWidth: number; cropHeight: number }
+  ) => {
+    setUploadProgress({
+      target: "banner",
+      label: "Memproses crop & trim video banner",
+      progress: 0,
+    });
+
+    const video = document.createElement("video");
+    video.src = URL.createObjectURL(file);
+    video.muted = true;
+    video.playsInline = true;
+    video.loop = false;
+
+    video.style.position = "fixed";
+    video.style.top = "0";
+    video.style.left = "0";
+    video.style.width = "400px";
+    video.style.height = "100px";
+    video.style.opacity = "0.01";
+    video.style.pointerEvents = "none";
+    video.style.zIndex = "-9999";
+    document.body.appendChild(video);
+
+    const cleanup = () => {
+      if (video.parentNode) {
+        document.body.removeChild(video);
+      }
+      video.pause();
+      URL.revokeObjectURL(video.src);
+    };
+
+    video.onloadedmetadata = () => {
+      const { x, y, scale, cropWidth, cropHeight } = cropParams;
+      const naturalWidth = video.videoWidth;
+      const naturalHeight = video.videoHeight;
+      const minScale = Math.max(cropWidth / naturalWidth, cropHeight / naturalHeight);
+      const s = scale * minScale;
+
+      const cropWNatural = cropWidth / s;
+      const cropHNatural = cropHeight / s;
+      const sourceX = (naturalWidth / 2) - (cropWNatural / 2) - (x / s);
+      const sourceY = (naturalHeight / 2) - (cropHNatural / 2) - (y / s);
+
+      const canvas = document.createElement("canvas");
+      canvas.width = 1200;
+      canvas.height = 300;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        cleanup();
+        setUploadProgress(null);
+        return;
+      }
+
+      const playbackRate = 2; // 2x playback speed for stable frame extraction
+      video.playbackRate = playbackRate;
+
+      video.play().then(() => {
+        const stream = (canvas as any).captureStream ? (canvas as any).captureStream(30) : (canvas as any).mozCaptureStream(30);
+
+        let mimeType = "video/webm";
+        if (MediaRecorder.isTypeSupported("video/mp4")) {
+          mimeType = "video/mp4";
+        } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9")) {
+          mimeType = "video/webm;codecs=vp9";
+        }
+
+        const mediaRecorder = new MediaRecorder(stream, { mimeType });
+        const chunks: Blob[] = [];
+
+        mediaRecorder.ondataavailable = (e) => {
+          if (e.data.size > 0) chunks.push(e.data);
+        };
+
+        const maxVideoDuration = Math.min(30, video.duration);
+        const realDurationMs = (maxVideoDuration * 1000) / playbackRate;
+        const startTime = Date.now();
+
+        let animationId: number;
+        const drawFrame = () => {
+          if (video.paused || video.ended) return;
+          ctx.drawImage(video, sourceX, sourceY, cropWNatural, cropHNatural, 0, 0, 1200, 300);
+          animationId = requestAnimationFrame(drawFrame);
+        };
+
+        drawFrame();
+
+        const progressInterval = window.setInterval(() => {
+          const elapsed = Date.now() - startTime;
+          const percent = Math.min(99, Math.round((elapsed / realDurationMs) * 100));
+          setUploadProgress({
+            target: "banner",
+            label: `Memproses crop & trim video banner (${Math.round(elapsed / 1000 * playbackRate)}s / ${Math.round(maxVideoDuration)}s)`,
+            progress: percent,
+          });
+        }, 100);
+
+        mediaRecorder.onstop = () => {
+          window.clearInterval(progressInterval);
+          cancelAnimationFrame(animationId);
+          setUploadProgress({
+            target: "banner",
+            label: "Selesai memproses video banner",
+            progress: 100,
+          });
+
+          const trimmedBlob = new Blob(chunks, { type: mimeType });
+          const trimmedFile = new File([trimmedBlob], `cropped-trimmed-${file.name}`, { type: mimeType });
+          const previewUrl = URL.createObjectURL(trimmedBlob);
+
+          setDraftBanner(previewUrl);
+          setDraftBannerKind("video");
+          setDraftBannerFile(trimmedFile);
+          setDraftBannerObjectUrl(previewUrl);
+
+          cleanup();
+
+          setTimeout(() => {
+            setUploadProgress(null);
+          }, 600);
+        };
+
+        mediaRecorder.start();
+
+        const stopTimeout = window.setTimeout(() => {
+          if (mediaRecorder.state !== "inactive") {
+            mediaRecorder.stop();
+          }
+        }, realDurationMs);
+
+        video.onended = () => {
+          window.clearTimeout(stopTimeout);
+          if (mediaRecorder.state !== "inactive") {
+            mediaRecorder.stop();
+          }
+        };
+      }).catch((err) => {
+        console.error("Video processing failed:", err);
+        cleanup();
+        setUploadProgress(null);
+      });
+    };
+
+    video.onerror = () => {
+      console.error("Video failed to load");
+      cleanup();
+      setUploadProgress(null);
+    };
+  };
+
   const handleImageUpload = (event: ChangeEvent<HTMLInputElement>, target: "avatar" | "banner") => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -458,139 +610,10 @@ function EditorModal({
     const isVideo = target === "banner" && file.type.startsWith("video/");
 
     if (isVideo) {
-      const video = document.createElement("video");
-      video.src = URL.createObjectURL(file);
-      video.muted = true;
-      video.playsInline = true;
-
-      video.style.position = "fixed";
-      video.style.top = "-9999px";
-      video.style.left = "-9999px";
-      video.style.width = "100px";
-      video.style.height = "100px";
-      document.body.appendChild(video);
-
-      const cleanupVideo = () => {
-        if (video.parentNode) {
-          document.body.removeChild(video);
-        }
-      };
-
-      video.onloadedmetadata = () => {
-        const duration = video.duration;
-
-        if (duration <= 30) {
-          const previewUrl = URL.createObjectURL(file);
-          queueProgress(
-            [
-              { delay: 0, progress: 10 },
-              { delay: 160, progress: 38 },
-              { delay: 360, progress: 68 },
-              { delay: 650, progress: 100 },
-            ],
-            () => {
-              setDraftBanner(previewUrl);
-              setDraftBannerKind("video");
-              setDraftBannerFile(file);
-              setDraftBannerObjectUrl(previewUrl);
-              cleanupVideo();
-              const doneTimer = window.setTimeout(() => setUploadProgress(null), 500);
-              progressTimersRef.current.push(doneTimer);
-            },
-          );
-        } else {
-          setUploadProgress({
-            target: "banner",
-            label: "Memotong video banner (maks. 30 detik)",
-            progress: 0,
-          });
-
-          const playbackRate = 4;
-          video.playbackRate = playbackRate;
-
-          video.play().then(() => {
-            const stream = (video as any).captureStream ? (video as any).captureStream() : (video as any).mozCaptureStream();
-
-            let mimeType = "video/webm";
-            if (MediaRecorder.isTypeSupported("video/mp4")) {
-              mimeType = "video/mp4";
-            } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9")) {
-              mimeType = "video/webm;codecs=vp9";
-            }
-
-            const mediaRecorder = new MediaRecorder(stream, { mimeType });
-            const chunks: Blob[] = [];
-
-            mediaRecorder.ondataavailable = (e) => {
-              if (e.data.size > 0) chunks.push(e.data);
-            };
-
-            const recordingDurationMs = 30000;
-            const realDurationMs = recordingDurationMs / playbackRate;
-            const startTime = Date.now();
-
-            const progressInterval = window.setInterval(() => {
-              const elapsed = Date.now() - startTime;
-              const percent = Math.min(99, Math.round((elapsed / realDurationMs) * 100));
-              setUploadProgress({
-                target: "banner",
-                label: "Memotong video banner (maks. 30 detik)",
-                progress: percent,
-              });
-            }, 100);
-
-            mediaRecorder.onstop = () => {
-              window.clearInterval(progressInterval);
-              setUploadProgress({
-                target: "banner",
-                label: "Memotong video banner (maks. 30 detik)",
-                progress: 100,
-              });
-
-              const trimmedBlob = new Blob(chunks, { type: mimeType });
-              const trimmedFile = new File([trimmedBlob], `trimmed-${file.name}`, { type: mimeType });
-              const previewUrl = URL.createObjectURL(trimmedBlob);
-
-              setDraftBanner(previewUrl);
-              setDraftBannerKind("video");
-              setDraftBannerFile(trimmedFile);
-              setDraftBannerObjectUrl(previewUrl);
-
-              video.pause();
-              URL.revokeObjectURL(video.src);
-              cleanupVideo();
-
-              const doneTimer = window.setTimeout(() => setUploadProgress(null), 500);
-              progressTimersRef.current.push(doneTimer);
-            };
-
-            mediaRecorder.start();
-
-            const stopTimeout = window.setTimeout(() => {
-              if (mediaRecorder.state !== "inactive") {
-                mediaRecorder.stop();
-              }
-            }, realDurationMs);
-
-            video.onended = () => {
-              window.clearTimeout(stopTimeout);
-              if (mediaRecorder.state !== "inactive") {
-                mediaRecorder.stop();
-              }
-            };
-          }).catch((err) => {
-            console.error("Video trimming failed:", err);
-            cleanupVideo();
-            setUploadProgress(null);
-          });
-        }
-      };
-
-      video.onerror = () => {
-        console.error("Video failed to load metadata");
-        cleanupVideo();
-        setUploadProgress(null);
-      };
+      const previewUrl = URL.createObjectURL(file);
+      setDraftBannerKind("video");
+      setDraftBannerFile(file);
+      setCropTargetUrl(previewUrl);
       return;
     }
 
@@ -599,6 +622,7 @@ function EditorModal({
       reader.onload = () => {
         if (typeof reader.result === "string") {
           setCropTargetUrl(reader.result);
+          setDraftBannerKind("image");
         }
       };
       reader.readAsDataURL(file);
@@ -851,9 +875,10 @@ function EditorModal({
 
               {cropTargetUrl ? (
                 <ImageCropper
-                  imageSrc={cropTargetUrl}
+                  mediaSrc={cropTargetUrl}
+                  mediaType={draftBannerKind}
                   onCancel={() => setCropTargetUrl(null)}
-                  onCrop={(croppedBase64) => {
+                  onCropImage={(croppedBase64) => {
                     setCropTargetUrl(null);
                     setUploadProgress({
                       target: "banner",
@@ -876,6 +901,12 @@ function EditorModal({
                         setTimeout(() => setUploadProgress(null), 300);
                       }
                     }, 60);
+                  }}
+                  onCropVideo={(cropParams) => {
+                    setCropTargetUrl(null);
+                    if (draftBannerFile) {
+                      startVideoCropAndTrim(draftBannerFile, cropParams);
+                    }
                   }}
                 />
               ) : null}

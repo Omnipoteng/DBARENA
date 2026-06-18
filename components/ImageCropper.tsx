@@ -1,12 +1,20 @@
 import React, { useState, useRef, useEffect } from "react";
 
 interface ImageCropperProps {
-  imageSrc: string;
-  onCrop: (croppedImageBase64: string) => void;
+  mediaSrc: string;
+  mediaType: "image" | "video";
+  onCropImage: (croppedImageBase64: string) => void;
+  onCropVideo: (cropParams: { x: number; y: number; scale: number; cropWidth: number; cropHeight: number }) => void;
   onCancel: () => void;
 }
 
-export default function ImageCropper({ imageSrc, onCrop, onCancel }: ImageCropperProps) {
+export default function ImageCropper({
+  mediaSrc,
+  mediaType,
+  onCropImage,
+  onCropVideo,
+  onCancel
+}: ImageCropperProps) {
   const [scale, setScale] = useState(1); // 1 to 5 relative to minScale
   const [x, setX] = useState(0);
   const [y, setY] = useState(0);
@@ -20,6 +28,7 @@ export default function ImageCropper({ imageSrc, onCrop, onCancel }: ImageCroppe
   const containerRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const dragStartRef = useRef({ x: 0, y: 0 });
 
   // Touch and pointer tracking
@@ -53,6 +62,13 @@ export default function ImageCropper({ imageSrc, onCrop, onCancel }: ImageCroppe
     const img = e.currentTarget;
     setNaturalWidth(img.naturalWidth);
     setNaturalHeight(img.naturalHeight);
+    setIsLoaded(true);
+  };
+
+  const handleVideoLoad = (e: React.SyntheticEvent<HTMLVideoElement>) => {
+    const video = e.currentTarget;
+    setNaturalWidth(video.videoWidth);
+    setNaturalHeight(video.videoHeight);
     setIsLoaded(true);
   };
 
@@ -108,7 +124,6 @@ export default function ImageCropper({ imageSrc, onCrop, onCancel }: ImageCroppe
     if (activePointersRef.current.size === 0) {
       setIsDragging(false);
     } else if (activePointersRef.current.size === 1) {
-      // Resume dragging with the remaining pointer
       const remainingPointer = Array.from(activePointersRef.current.values())[0];
       dragStartRef.current = { x: remainingPointer.x - x, y: remainingPointer.y - y };
       setIsDragging(true);
@@ -132,6 +147,11 @@ export default function ImageCropper({ imageSrc, onCrop, onCancel }: ImageCroppe
   };
 
   const handleSave = async () => {
+    if (mediaType === "video") {
+      onCropVideo({ x, y, scale, cropWidth, cropHeight });
+      return;
+    }
+
     if (!imgRef.current) return;
 
     const img = imgRef.current;
@@ -166,11 +186,11 @@ export default function ImageCropper({ imageSrc, onCrop, onCancel }: ImageCroppe
     );
 
     const croppedBase64 = canvas.toDataURL("image/jpeg", 0.9);
-    onCrop(croppedBase64);
+    onCropImage(croppedBase64);
   };
 
   // Compute CSS values for image container
-  const imgStyle: React.CSSProperties = {
+  const mediaStyle: React.CSSProperties = {
     width: naturalWidth * minScale * scale,
     height: naturalHeight * minScale * scale,
     transform: `translate(${x}px, ${y}px)`,
@@ -189,7 +209,7 @@ export default function ImageCropper({ imageSrc, onCrop, onCancel }: ImageCroppe
           <div>
             <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/40">Adjust banner</span>
             <h4 className="mt-1 font-display text-xl uppercase tracking-[0.05em] text-white sm:text-2xl">
-              Sesuaikan Area Banner
+              Sesuaikan Area Banner ({mediaType === "video" ? "Video" : "Gambar"})
             </h4>
           </div>
           <button
@@ -212,15 +232,29 @@ export default function ImageCropper({ imageSrc, onCrop, onCancel }: ImageCroppe
             onWheel={handleWheel}
             className="relative w-full aspect-[4/1] overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 cursor-move touch-none"
           >
-            {/* Draggable Image */}
-            <img
-              ref={imgRef}
-              src={imageSrc}
-              alt="Crop target"
-              onLoad={handleImageLoad}
-              style={imgStyle}
-              className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-cover pointer-events-none select-none"
-            />
+            {/* Draggable Media */}
+            {mediaType === "video" ? (
+              <video
+                ref={videoRef}
+                src={mediaSrc}
+                autoPlay
+                loop
+                muted
+                playsInline
+                onLoadedMetadata={handleVideoLoad}
+                style={mediaStyle}
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-cover pointer-events-none select-none"
+              />
+            ) : (
+              <img
+                ref={imgRef}
+                src={mediaSrc}
+                alt="Crop target"
+                onLoad={handleImageLoad}
+                style={mediaStyle}
+                className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 object-cover pointer-events-none select-none"
+              />
+            )}
 
             {/* Grid Overlay lines (fade in on drag) */}
             <div className={`absolute inset-0 pointer-events-none border-2 border-white/40 transition-opacity duration-300 ${isDragging ? "opacity-100" : "opacity-30"}`}>
@@ -239,7 +273,7 @@ export default function ImageCropper({ imageSrc, onCrop, onCancel }: ImageCroppe
           </div>
 
           <p className="mt-3 text-[10px] text-center uppercase tracking-[0.25em] text-white/40">
-            Geser gambar untuk memposisikan • Gunakan scroll/pinch untuk zoom
+            Geser media untuk memposisikan • Gunakan scroll/pinch untuk zoom
           </p>
 
           {/* Zoom controls */}
