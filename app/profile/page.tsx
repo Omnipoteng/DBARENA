@@ -32,6 +32,8 @@ type RankTheme = {
   accent: string;
 };
 
+type BannerCrop = { x: number; y: number; zoom: number };
+
 type SavedProfile = {
   displayName: string;
   username: string;
@@ -40,6 +42,7 @@ type SavedProfile = {
   bannerSrc: string;
   bannerKind: "image" | "video";
   bannerFocus: number;
+  bannerCrop?: BannerCrop | null;
   border: BorderKey;
   tags: string[];
 };
@@ -365,6 +368,7 @@ function EditorModal({
   bannerSrc,
   bannerKind,
   bannerFocus,
+  bannerCrop: initialBannerCrop,
   tags,
   selectedBorder,
   bannerPreviewUrl,
@@ -379,6 +383,7 @@ function EditorModal({
   bannerSrc: string;
   bannerKind: "image" | "video";
   bannerFocus: number;
+  bannerCrop?: BannerCrop | null;
   tags: string[];
   selectedBorder: BorderKey;
   bannerPreviewUrl?: string | null;
@@ -391,6 +396,7 @@ function EditorModal({
     bannerSrc?: string;
     bannerKind?: "image" | "video";
     bannerFocus?: number;
+    bannerCrop?: BannerCrop | null;
     tags?: string[];
     border?: BorderKey;
     bannerFile?: File | null;
@@ -403,6 +409,7 @@ function EditorModal({
   const [draftBanner, setDraftBanner] = useState(bannerPreviewUrl ?? (bannerKind === "video" ? "" : bannerSrc));
   const [draftBannerKind, setDraftBannerKind] = useState<"image" | "video">(bannerKind);
   const [draftBannerFocus, setDraftBannerFocus] = useState(bannerFocus);
+  const [draftBannerCrop, setDraftBannerCrop] = useState<BannerCrop | null>(initialBannerCrop ?? null);
   const [draftTags, setDraftTags] = useState(tags);
   const [nextTag, setNextTag] = useState("");
   const [draftBorder, setDraftBorder] = useState<BorderKey>(selectedBorder);
@@ -420,157 +427,8 @@ function EditorModal({
   const title =
     mode === "border" ? "Kustomisasi Border" : mode === "profile" ? "Kustomisasi Profil" : "Kustomisasi Nama";
 
-  const startVideoCropAndTrim = (
-    file: File,
-    cropParams: { x: number; y: number; scale: number; cropWidth: number; cropHeight: number }
-  ) => {
-    setUploadProgress({
-      target: "banner",
-      label: "Memproses crop & trim video banner",
-      progress: 0,
-    });
-
-    const video = document.createElement("video");
-    video.src = URL.createObjectURL(file);
-    video.muted = true;
-    video.playsInline = true;
-    video.loop = false;
-
-    video.style.position = "fixed";
-    video.style.top = "0";
-    video.style.left = "0";
-    video.style.width = "400px";
-    video.style.height = "100px";
-    video.style.opacity = "0.01";
-    video.style.pointerEvents = "none";
-    video.style.zIndex = "-9999";
-    document.body.appendChild(video);
-
-    const cleanup = () => {
-      if (video.parentNode) {
-        document.body.removeChild(video);
-      }
-      video.pause();
-      URL.revokeObjectURL(video.src);
-    };
-
-    video.onloadedmetadata = () => {
-      const { x, y, scale, cropWidth, cropHeight } = cropParams;
-      const naturalWidth = video.videoWidth;
-      const naturalHeight = video.videoHeight;
-      const minScale = Math.max(cropWidth / naturalWidth, cropHeight / naturalHeight);
-      const s = scale * minScale;
-
-      const cropWNatural = cropWidth / s;
-      const cropHNatural = cropHeight / s;
-      const sourceX = (naturalWidth / 2) - (cropWNatural / 2) - (x / s);
-      const sourceY = (naturalHeight / 2) - (cropHNatural / 2) - (y / s);
-
-      const canvas = document.createElement("canvas");
-      canvas.width = 1200;
-      canvas.height = 300;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) {
-        cleanup();
-        setUploadProgress(null);
-        return;
-      }
-
-      const playbackRate = 2; // 2x playback speed for stable frame extraction
-      video.playbackRate = playbackRate;
-
-      video.play().then(() => {
-        const stream = (canvas as any).captureStream ? (canvas as any).captureStream(30) : (canvas as any).mozCaptureStream(30);
-
-        let mimeType = "video/webm";
-        if (MediaRecorder.isTypeSupported("video/mp4")) {
-          mimeType = "video/mp4";
-        } else if (MediaRecorder.isTypeSupported("video/webm;codecs=vp9")) {
-          mimeType = "video/webm;codecs=vp9";
-        }
-
-        const mediaRecorder = new MediaRecorder(stream, { mimeType });
-        const chunks: Blob[] = [];
-
-        mediaRecorder.ondataavailable = (e) => {
-          if (e.data.size > 0) chunks.push(e.data);
-        };
-
-        const maxVideoDuration = Math.min(30, video.duration);
-        const realDurationMs = (maxVideoDuration * 1000) / playbackRate;
-        const startTime = Date.now();
-
-        let animationId: number;
-        const drawFrame = () => {
-          if (video.paused || video.ended) return;
-          ctx.drawImage(video, sourceX, sourceY, cropWNatural, cropHNatural, 0, 0, 1200, 300);
-          animationId = requestAnimationFrame(drawFrame);
-        };
-
-        drawFrame();
-
-        const progressInterval = window.setInterval(() => {
-          const elapsed = Date.now() - startTime;
-          const percent = Math.min(99, Math.round((elapsed / realDurationMs) * 100));
-          setUploadProgress({
-            target: "banner",
-            label: `Memproses crop & trim video banner (${Math.round(elapsed / 1000 * playbackRate)}s / ${Math.round(maxVideoDuration)}s)`,
-            progress: percent,
-          });
-        }, 100);
-
-        mediaRecorder.onstop = () => {
-          window.clearInterval(progressInterval);
-          cancelAnimationFrame(animationId);
-          setUploadProgress({
-            target: "banner",
-            label: "Selesai memproses video banner",
-            progress: 100,
-          });
-
-          const trimmedBlob = new Blob(chunks, { type: mimeType });
-          const trimmedFile = new File([trimmedBlob], `cropped-trimmed-${file.name}`, { type: mimeType });
-          const previewUrl = URL.createObjectURL(trimmedBlob);
-
-          setDraftBanner(previewUrl);
-          setDraftBannerKind("video");
-          setDraftBannerFile(trimmedFile);
-          setDraftBannerObjectUrl(previewUrl);
-
-          cleanup();
-
-          setTimeout(() => {
-            setUploadProgress(null);
-          }, 600);
-        };
-
-        mediaRecorder.start();
-
-        const stopTimeout = window.setTimeout(() => {
-          if (mediaRecorder.state !== "inactive") {
-            mediaRecorder.stop();
-          }
-        }, realDurationMs);
-
-        video.onended = () => {
-          window.clearTimeout(stopTimeout);
-          if (mediaRecorder.state !== "inactive") {
-            mediaRecorder.stop();
-          }
-        };
-      }).catch((err) => {
-        console.error("Video processing failed:", err);
-        cleanup();
-        setUploadProgress(null);
-      });
-    };
-
-    video.onerror = () => {
-      console.error("Video failed to load");
-      cleanup();
-      setUploadProgress(null);
-    };
-  };
+  // No re-encoding needed — videos are stored and played as-is (original quality / fps).
+  // Crop is applied via CSS transforms at display time.
 
   const handleImageUpload = (event: ChangeEvent<HTMLInputElement>, target: "avatar" | "banner") => {
     const file = event.target.files?.[0];
@@ -610,10 +468,36 @@ function EditorModal({
     const isVideo = target === "banner" && file.type.startsWith("video/");
 
     if (isVideo) {
-      const previewUrl = URL.createObjectURL(file);
-      setDraftBannerKind("video");
-      setDraftBannerFile(file);
-      setCropTargetUrl(previewUrl);
+      // Check duration before opening cropper — reject videos longer than 10 seconds.
+      const tempUrl = URL.createObjectURL(file);
+      const tempEl = document.createElement("video");
+      tempEl.preload = "metadata";
+      tempEl.src = tempUrl;
+      tempEl.onloadedmetadata = () => {
+        URL.revokeObjectURL(tempUrl);
+        if (tempEl.duration > 10) {
+          setUploadProgress({
+            target: "banner",
+            label: "⚠️ Video terlalu panjang! Maksimal 10 detik.",
+            progress: 100,
+          });
+          window.setTimeout(() => setUploadProgress(null), 3500);
+        } else {
+          const previewUrl = URL.createObjectURL(file);
+          setDraftBannerKind("video");
+          setDraftBannerFile(file);
+          setCropTargetUrl(previewUrl);
+        }
+      };
+      tempEl.onerror = () => {
+        URL.revokeObjectURL(tempUrl);
+        setUploadProgress({
+          target: "banner",
+          label: "Gagal memuat video. Coba file lain.",
+          progress: 100,
+        });
+        window.setTimeout(() => setUploadProgress(null), 3000);
+      };
       return;
     }
 
@@ -902,10 +786,14 @@ function EditorModal({
                       }
                     }, 60);
                   }}
-                  onCropVideo={(cropParams) => {
+                  onCropVideo={({ cropX, cropY, cropZoom }) => {
                     setCropTargetUrl(null);
+                    // Store crop params; original file remains untouched (no re-encoding).
+                    setDraftBannerCrop({ x: cropX, y: cropY, zoom: cropZoom });
                     if (draftBannerFile) {
-                      startVideoCropAndTrim(draftBannerFile, cropParams);
+                      const previewUrl = URL.createObjectURL(draftBannerFile);
+                      setDraftBanner(previewUrl);
+                      setDraftBannerObjectUrl(previewUrl);
                     }
                   }}
                 />
@@ -1024,6 +912,7 @@ function EditorModal({
                             bannerSrc: draftBannerKind === "video" ? getProfileBannerVideoKey() : draftBanner,
                             bannerKind: draftBannerKind,
                             bannerFocus: draftBannerFocus,
+                            bannerCrop: draftBannerCrop,
                             tags: draftTags,
                             bannerFile: draftBannerKind === "video" ? draftBannerFile : null,
                           }
@@ -1061,6 +950,7 @@ export default function ProfilePage() {
   const [bannerSrc, setBannerSrc] = useState(defaultProfile.bannerSrc);
   const [bannerKind, setBannerKind] = useState<"image" | "video">(defaultProfile.bannerKind);
   const [bannerFocus, setBannerFocus] = useState(defaultProfile.bannerFocus);
+  const [bannerCrop, setBannerCrop] = useState<BannerCrop | null>(null);
   const [bannerPreviewUrl, setBannerPreviewUrl] = useState<string | null>(null);
   const [selectedBorder, setSelectedBorder] = useState<BorderKey>(defaultProfile.border);
   const [tags, setTags] = useState<string[]>(defaultProfile.tags);
@@ -1092,6 +982,7 @@ export default function ProfilePage() {
             setBannerKind(parsed.bannerKind);
           }
           if (typeof parsed.bannerFocus === "number") setBannerFocus(parsed.bannerFocus);
+          if (parsed.bannerCrop && typeof parsed.bannerCrop.x === "number") setBannerCrop(parsed.bannerCrop);
           if (parsed.border && ["none", "legend", "mythic", "apex"].includes(parsed.border)) {
             setSelectedBorder(parsed.border);
           }
@@ -1156,6 +1047,7 @@ export default function ProfilePage() {
           bannerSrc,
           bannerKind,
           bannerFocus,
+          bannerCrop,
           border: selectedBorder,
           tags,
         } satisfies SavedProfile),
@@ -1163,7 +1055,7 @@ export default function ProfilePage() {
     } catch {
       // ignore storage quota issues so profile edits don't break
     }
-  }, [avatarSrc, bannerFocus, bannerKind, bannerSrc, bio, displayName, loaded, selectedBorder, tags, username]);
+  }, [avatarSrc, bannerCrop, bannerFocus, bannerKind, bannerSrc, bio, displayName, loaded, selectedBorder, tags, username]);
 
   useEffect(() => {
     return () => {
@@ -1184,11 +1076,19 @@ export default function ProfilePage() {
             {bannerKind === "video" && bannerPreviewUrl ? (
               <video
                 src={bannerPreviewUrl}
-                className="absolute inset-0 h-full w-full object-cover"
+                className="absolute inset-0 h-full w-full"
                 autoPlay
                 loop
                 muted
                 playsInline
+                style={{
+                  objectFit: "cover",
+                  ...(bannerCrop ? {
+                    objectPosition: `${bannerCrop.x}% ${bannerCrop.y}%`,
+                    transform: bannerCrop.zoom > 1 ? `scale(${bannerCrop.zoom})` : undefined,
+                    transformOrigin: `${bannerCrop.x}% ${bannerCrop.y}%`,
+                  } : {}),
+                }}
               />
             ) : bannerSrc ? (
                 <Image
@@ -1532,6 +1432,7 @@ export default function ProfilePage() {
             bannerSrc={bannerSrc}
             bannerKind={bannerKind}
             bannerFocus={bannerFocus}
+            bannerCrop={bannerCrop}
             tags={tags}
             selectedBorder={selectedBorder}
             bannerPreviewUrl={bannerPreviewUrl}
@@ -1544,6 +1445,7 @@ export default function ProfilePage() {
               if (next.bannerKind === "video") {
                 if (next.bannerFile) {
                   try {
+                    // Save the ORIGINAL uncompressed file — no re-encoding, preserves all fps/quality.
                     await saveProfileBannerVideo(next.bannerFile);
                     const previewUrl = URL.createObjectURL(next.bannerFile);
                     setBannerPreviewUrl(previewUrl);
@@ -1555,10 +1457,13 @@ export default function ProfilePage() {
                 } else {
                   setBannerKind("video");
                 }
+                // Always update crop params when video banner is applied.
+                if (next.bannerCrop !== undefined) setBannerCrop(next.bannerCrop ?? null);
               } else if (typeof next.bannerSrc === "string") {
                 setBannerSrc(next.bannerSrc);
                 setBannerPreviewUrl(null);
                 setBannerKind("image");
+                setBannerCrop(null);
               }
               if (typeof next.bannerFocus === "number") setBannerFocus(next.bannerFocus);
               if (Array.isArray(next.tags)) setTags(next.tags);

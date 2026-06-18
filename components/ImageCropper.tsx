@@ -4,7 +4,9 @@ interface ImageCropperProps {
   mediaSrc: string;
   mediaType: "image" | "video";
   onCropImage: (croppedImageBase64: string) => void;
-  onCropVideo: (cropParams: { x: number; y: number; scale: number; cropWidth: number; cropHeight: number }) => void;
+  // cropX/cropY: 0-100% — which point of the original video appears at the center of the banner.
+  // cropZoom: 1-5 — additional zoom multiplier on top of object-fit cover scale.
+  onCropVideo: (crop: { cropX: number; cropY: number; cropZoom: number }) => void;
   onCancel: () => void;
 }
 
@@ -148,7 +150,13 @@ export default function ImageCropper({
 
   const handleSave = async () => {
     if (mediaType === "video") {
-      onCropVideo({ x, y, scale, cropWidth, cropHeight });
+      // Convert raw pixel offsets → normalized CSS-compatible percentages.
+      // totalScale = how many pixels in the display match one natural video pixel.
+      const totalScale = scale * minScale;
+      // Which percentage point of the video is at the center of the viewport?
+      const cropX = Math.max(0, Math.min(100, ((naturalWidth / 2) - (x / totalScale)) / naturalWidth * 100));
+      const cropY = Math.max(0, Math.min(100, ((naturalHeight / 2) - (y / totalScale)) / naturalHeight * 100));
+      onCropVideo({ cropX, cropY, cropZoom: scale });
       return;
     }
 
