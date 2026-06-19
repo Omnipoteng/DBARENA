@@ -6,7 +6,7 @@ export default function HeroSection() {
       id="home" 
       className="relative overflow-hidden border-y border-black/10 bg-[#f7f6f2] text-black" 
     > 
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,_rgba(255,255,255,0.95)_0%,_transparent_42%),_rgba(242,241,236,0.96)_100%)]" /> 
+      <div className="absolute inset-0" /> 
 
       <div className="relative grid min-h-[320px] content-end px-4 py-19 sm:px-6 sm:py-10 lg:min-h-[520px] lg:px-8 lg:py-10"> 
         <div className="max-w-3xl"> 
