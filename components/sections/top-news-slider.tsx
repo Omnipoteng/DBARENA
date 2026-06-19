@@ -6,10 +6,10 @@ import { useEffect, useRef, useState } from "react";
 import type { Post } from "@/types/post";
 
 const sliderImages = [
+  "/images/news baru.jpeg",
+  "/images/dba 2.jpeg",
   "/images/news banner.jpg",
   "/images/news banner 2.jpg",
-  "/images/3.jpg",
-  "/images/4.jpg",
 ];
 
 export default function TopNewsSlider({ posts }: { posts: Post[] }) {

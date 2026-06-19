@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import localFont from "next/font/local";
 
@@ -6,6 +6,7 @@ import CookieBanner from "@/components/cookie-banner";
 import DailyLoginPopup from "@/components/daily-login-popup";
 import PageTransitionLoader from "@/components/page-transition-loader";
 import SitePreferencesSync from "@/components/site-preferences-sync";
+import PwaInstaller from "@/components/pwa-installer";
 import { PostStoreProvider } from "@/components/post-store-provider";
 import { THEME_COOKIE, readThemeCookieValue } from "@/lib/site-preferences";
 
@@ -21,6 +22,20 @@ export const metadata: Metadata = {
   title: "DBARENA | Battleboarding News & Community Hub",
   description:
     "Pusat berita, event, dan update komunitas battleboarding internasional.",
+  manifest: "/manifest.json",
+  appleWebApp: {
+    capable: true,
+    title: "DBARENA",
+    statusBarStyle: "default",
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#090909",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
 };
 
 export default async function RootLayout({
@@ -45,7 +60,9 @@ export default async function RootLayout({
         <PageTransitionLoader />
         <DailyLoginPopup />
         <CookieBanner />
+        <PwaInstaller />
       </body>
     </html>
   );
 }
+
