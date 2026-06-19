@@ -33,33 +33,38 @@ export default function EventsSection() {
   const [selectedEvent, setSelectedEvent] = useState<typeof eventsData[0] | null>(null);
 
   return (
-    <section id="events" className="py-4">
-      <div className="mb-6">
-        <p className="text-sm uppercase text-black/55">
+    <section id="events" className="py-2">
+      <div className="mb-5 border-b border-black/10 pb-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.32em] text-black/42">
           Event yang tersedia
         </p>
-        <h2 className="mt-2 font-display text-3xl uppercase text-black">
+        <h2 className="mt-2 font-display text-4xl uppercase text-black sm:text-5xl">
           acara yang tersedia
         </h2>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3">
         {eventsData.map((event, index) => (
           <article
             key={index}
-            className="rounded-[1.75rem] border border-black/8 bg-white p-6 shadow-[0_18px_60px_rgba(15,23,42,0.12)] transition duration-300 hover:scale-[1.02] hover:border-black/15 flex flex-col items-start"
+            className="grid gap-4 border-b border-black/10 py-5 transition duration-300 md:grid-cols-[120px_1fr_auto] md:items-center"
           >
-            <p className="text-xs uppercase tracking-[0.28em] text-black/50">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-black/42">
               Event {String(index + 1).padStart(2, "0")}
             </p>
-            <h3 className="mt-3 text-2xl font-semibold text-black">{event.title}</h3>
-            <p className="mt-3 text-sm leading-7 text-black/65 line-clamp-2">
-              {event.description}
-            </p>
-            <div className="mt-auto pt-6 w-full">
+            <div>
+              <h3 className="text-xl font-semibold text-black">{event.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-black/60 line-clamp-2">
+                {event.description}
+              </p>
+              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.22em] text-black/45">
+                {event.date}
+              </p>
+            </div>
+            <div className="w-full md:w-auto">
               <button
                 onClick={() => setSelectedEvent(event)}
-                className="inline-flex rounded-full border border-black/12 bg-black px-8 py-3 text-sm font-semibold uppercase tracking-[0.2em] text-white transition duration-300 hover:scale-105 hover:bg-neutral-800"
+                className="inline-flex h-9 w-full items-center justify-center border border-black bg-black px-4 text-xs font-semibold uppercase tracking-[0.14em] text-white transition duration-300 hover:bg-white hover:text-black md:w-auto"
               >
                 bergabung
               </button>
@@ -75,12 +80,12 @@ export default function EventsSection() {
           onClick={() => setSelectedEvent(null)}
         >
           <div 
-            className="relative flex flex-col w-full max-w-2xl bg-white rounded-[2rem] overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-300 border border-black/10"
+            className="relative flex flex-col w-full max-w-2xl overflow-hidden rounded-xl border border-black/10 bg-white shadow-2xl animate-in fade-in zoom-in-95 duration-300"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               onClick={() => setSelectedEvent(null)}
-              className="absolute top-6 right-6 z-10 flex h-10 w-10 items-center justify-center rounded-full bg-black/5 text-black hover:bg-black hover:text-white transition-colors"
+              className="absolute top-5 right-5 z-10 flex h-10 w-10 items-center justify-center rounded-lg bg-black/5 text-black transition-colors hover:bg-black hover:text-white"
               aria-label="Close"
             >
               <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
@@ -95,7 +100,7 @@ export default function EventsSection() {
                 {selectedEvent.title}
               </h3>
               
-              <div className="flex items-center gap-3 mb-8 text-black/80 bg-black/5 p-4 rounded-xl">
+              <div className="flex items-center gap-3 mb-8 text-black/80 bg-black/5 p-4 rounded-lg">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-black/60"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
                 <span className="font-semibold">{selectedEvent.date}</span>
               </div>
@@ -115,7 +120,7 @@ export default function EventsSection() {
                   target="_blank"
                   rel="noreferrer"
                   onClick={() => setSelectedEvent(null)}
-                  className="inline-flex w-full sm:w-auto justify-center rounded-full bg-black px-10 py-4 text-sm font-bold uppercase tracking-[0.2em] text-white transition duration-300 hover:scale-105 hover:bg-neutral-800 shadow-xl shadow-black/20"
+                  className="inline-flex w-full justify-center rounded-lg bg-black px-10 py-4 text-sm font-bold uppercase tracking-[0.18em] text-white transition duration-300 hover:bg-neutral-800 sm:w-auto"
                 >
                   bergabung
                 </a>

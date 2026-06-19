@@ -184,12 +184,12 @@ export default function TopNewsSlider({ posts }: { posts: Post[] }) {
           onScroll={handleScroll}
           onTouchStart={pauseAutoSlide}
           onMouseDown={pauseAutoSlide}
-          className="no-scrollbar flex snap-x snap-mandatory overflow-x-auto scroll-smooth touch-pan-x border border-black/6 bg-white shadow-[0_10px_30px_rgba(0,0,0,0.05)] sm:rounded-[28px]"
+          className="no-scrollbar flex snap-x snap-mandatory overflow-x-auto scroll-smooth touch-pan-x border-y border-black/10 bg-white"
         >
           {extendedSlides.map((post, index) => (
             <article
               key={`${post.id}-${index}`}
-              className="relative h-[38vw] min-h-[240px] max-h-[340px] w-full shrink-0 snap-center overflow-hidden sm:min-h-[300px] sm:max-h-[420px] lg:h-[32vw] lg:max-h-[500px]"
+              className="relative h-[46vw] min-h-[230px] max-h-[330px] w-full shrink-0 snap-center overflow-hidden sm:min-h-[280px] sm:max-h-[390px] lg:h-[30vw] lg:max-h-[440px]"
             >
               <Image
                 src={post.image}
@@ -202,14 +202,14 @@ export default function TopNewsSlider({ posts }: { posts: Post[] }) {
           ))}
         </div>
 
-        <div className="mt-5 flex items-center justify-center gap-3 px-4 sm:px-0">
+        <div className="mt-4 flex items-center justify-center gap-2 px-4 sm:px-0">
           {slides.map((post, index) => (
             <button
               key={post.id}
               type="button"
               onClick={() => goToSlide(index)}
-              className={`h-2.5 rounded-full transition-all duration-300 ${
-                index === activeIndex ? "w-12 bg-black" : "w-7 bg-black/18"
+              className={`h-1.5 rounded-full transition-all duration-300 ${
+                index === activeIndex ? "w-10 bg-black" : "w-5 bg-black/20"
               }`}
               aria-label={`Go to slide ${index + 1}`}
             />

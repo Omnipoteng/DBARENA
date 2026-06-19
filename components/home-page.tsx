@@ -14,10 +14,10 @@ export default function HomePage() {
   const { posts } = usePosts();
 
   return (
-    <div className="db-home-shell min-h-screen bg-[radial-gradient(circle_at_top,_rgba(0,0,0,0.06),_transparent_30%),linear-gradient(180deg,_#ffffff_0%,_#f7f7f5_52%,_#efefec_100%)] text-black">
+    <div className="db-home-shell min-h-screen bg-[#f4f4f2] text-black">
       <Navbar />
       <TopNewsSlider posts={posts} />
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-8 px-4 pb-20 sm:px-6 lg:px-8">
+      <main className="mx-auto flex w-full max-w-7xl flex-col gap-14 px-4 pb-20 pt-8 sm:px-6 lg:px-8 lg:gap-18 lg:pt-10">
         <HeroSection />
         <FeaturedNews post={posts[0]} />
         <NewsGrid posts={posts.slice(1)} />

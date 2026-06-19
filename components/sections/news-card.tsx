@@ -9,30 +9,29 @@ export default function NewsCard({ post }: { post: Post }) {
   return (
     <Link
       href={`/news/${post.id}`}
-      className="group block overflow-hidden rounded-[1.75rem] border border-black/8 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.12)] transition duration-300 hover:-translate-y-1 hover:border-black/15 hover:shadow-[0_24px_80px_rgba(15,23,42,0.14)]"
+      className="group block border-b border-black/10 pb-5 transition duration-300"
       aria-label={`Buka ${post.title}`}
     >
       <article className="flex h-full flex-col">
-        <div className="relative overflow-hidden">
+        <div className="relative overflow-hidden border border-black/10 bg-white">
           <Image
             src={post.image}
             alt={post.title}
             width={1200}
             height={900}
-            className="h-60 w-full object-cover transition duration-500 group-hover:scale-110 group-hover:opacity-85"
+            className="h-56 w-full object-cover transition duration-500 group-hover:scale-105"
           />
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,_rgba(0,0,0,0)_10%,_rgba(0,0,0,0.18)_100%)] opacity-0 transition duration-300 group-hover:opacity-100" />
         </div>
 
-        <div className="flex flex-1 flex-col p-5">
-          <p className="text-xs uppercase tracking-[0.25em] text-black/50">
+        <div className="flex flex-1 flex-col pt-4">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.25em] text-black/42">
             {post.date}
           </p>
-          <h3 className="mt-3 text-xl font-semibold text-black">{post.title}</h3>
-          <p className="mt-3 flex-1 text-sm leading-7 text-black/65">
+          <h3 className="mt-3 text-lg font-semibold leading-6 text-black">{post.title}</h3>
+          <p className="mt-3 flex-1 text-sm leading-6 text-black/60">
             {post.description}
           </p>
-          <span className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-black px-5 py-2.5 text-sm font-semibold text-white transition duration-200 hover:bg-black/80 active:scale-95">
+          <span className="mt-5 inline-flex h-9 items-center justify-center gap-2 border border-black bg-black px-3 text-xs font-semibold uppercase tracking-[0.12em] text-white transition duration-200 group-hover:bg-white group-hover:text-black">
             Baca Selengkapnya
             <svg
               xmlns="http://www.w3.org/2000/svg"

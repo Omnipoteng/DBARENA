@@ -1051,7 +1051,6 @@ export default function ProfilePage() {
           bannerSrc,
           bannerKind,
           bannerFocus,
-          bannerCrop,
           border: selectedBorder,
           tags,
         } satisfies SavedProfile),
@@ -1059,7 +1058,7 @@ export default function ProfilePage() {
     } catch {
       // ignore storage quota issues so profile edits don't break
     }
-  }, [avatarSrc, bannerCrop, bannerFocus, bannerKind, bannerSrc, bio, displayName, loaded, selectedBorder, tags, username]);
+  }, [avatarSrc, bannerFocus, bannerKind, bannerSrc, bio, displayName, loaded, selectedBorder, tags, username]);
 
   useEffect(() => {
     return () => {
