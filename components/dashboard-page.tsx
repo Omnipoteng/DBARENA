@@ -1030,7 +1030,7 @@ export default function DashboardPage() {
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   {[
-                    ["Font display", "Bebas Neue"],
+                    ["Font display", "Coolvetica"],
                     ["Body font", "Manrope"],
                     ["Accent color", "Black / White"],
                     ["Card radius", "1.5rem"],

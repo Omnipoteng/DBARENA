@@ -1320,6 +1320,12 @@ export default function ProfilePage() {
             >
               Open ranked ladder
             </Link>
+            <Link
+              href="/friends"
+              className="mt-3 inline-flex h-11 w-full items-center justify-center border border-black/10 bg-white px-4 text-sm font-semibold text-black transition hover:bg-black/5"
+            >
+              Find friends
+            </Link>
           </div>
         </section>
 

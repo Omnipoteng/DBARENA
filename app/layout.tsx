@@ -12,8 +12,8 @@ import { THEME_COOKIE, readThemeCookieValue } from "@/lib/site-preferences";
 import "./globals.css";
 import { cn } from "@/lib/utils";
 
-const bebasNeue = localFont({
-  src: "./fonts/BebasNeue-Regular.woff2",
+const coolvetica = localFont({
+  src: "./fonts/Coolvetica-Regular.woff2",
   variable: "--font-display",
 });
 
@@ -36,7 +36,7 @@ export default async function RootLayout({
       lang="en"
       suppressHydrationWarning
       data-ui-theme={theme}
-      className={cn("h-full", "antialiased", bebasNeue.variable, "font-sans", theme === "dark" && "dark")}
+      className={cn("h-full", "antialiased", coolvetica.variable, "font-sans", theme === "dark" && "dark")}
       style={{ colorScheme: theme }}
     >
       <body className="min-h-full bg-background font-sans text-foreground transition-colors duration-300">

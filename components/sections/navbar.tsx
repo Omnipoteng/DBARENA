@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 
@@ -28,6 +29,22 @@ const navItems = [
           strokeWidth={2}
           d="M5.5 19a6.5 6.5 0 0 1 13 0"
         />
+      </>
+    ),
+  },
+  {
+    label: "Friends",
+    href: "/friends",
+    icon: (
+      <>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M17 20a4 4 0 0 0-8 0"
+        />
+        <circle cx="9" cy="9" r="3.25" strokeWidth={2} fill="none" />
+        <circle cx="17" cy="10" r="2.75" strokeWidth={2} fill="none" />
       </>
     ),
   },
@@ -335,7 +352,7 @@ export default function Navbar() {
         <button
           type="button"
           onClick={() => setIsOpen((current) => !current)}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/10 bg-white text-black transition duration-300 hover:scale-105 hover:bg-black hover:text-white"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-black/10 bg-white text-black shadow-[0_8px_24px_rgba(0,0,0,0.05)] transition duration-300 hover:scale-105 hover:bg-black hover:text-white"
           aria-expanded={isOpen}
           aria-label="Toggle navigation menu"
         >
@@ -381,19 +398,29 @@ export default function Navbar() {
           aria-label="Navigation menu"
         >
           <div className="border-b border-black/8 px-5 py-4">
-            <div className="flex items-center gap-3 rounded-2xl bg-black/[0.03] p-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-black text-white">
-                <span className="text-xs font-semibold uppercase tracking-[0.16em]">
-                  DM
-                </span>
+            <div className="flex items-center gap-3 border border-black/8 bg-black/[0.03] px-3 py-3">
+              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-black/10 bg-white">
+                <Image
+                  src="/images/staff/staff-1.svg"
+                  alt="DBA profile avatar"
+                  fill
+                  sizes="48px"
+                  className="object-cover"
+                />
               </div>
               <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-black">
-                  DBA Member
-                </p>
+                <p className="truncate text-sm font-semibold text-black">DBA Reign</p>
                 <p className="truncate text-xs uppercase tracking-[0.2em] text-black/45">
-                  View Profile
+                  @dba.reign
                 </p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <span className="rounded-full bg-black px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
+                    Legend
+                  </span>
+                  <span className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-black/65">
+                    Legend Border
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -401,28 +428,6 @@ export default function Navbar() {
               <p className="text-[11px] uppercase tracking-[0.3em] text-black/35">Token wallet</p>
               <p className="mt-2 text-sm font-semibold text-black">DBA Token tersedia dari login harian</p>
             </div>
-
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              className="inline-flex items-center gap-2 rounded-full border border-black/10 px-4 py-2 text-sm font-semibold uppercase tracking-[0.16em] text-black transition hover:bg-black hover:text-white"
-              aria-label="Close navigation menu"
-            >
-              <svg
-                className="h-4 w-4"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M15 18l-6-6 6-6"
-                />
-              </svg>
-              Kembali
-            </button>
           </div>
 
           <nav className="flex flex-1 flex-col px-4 py-4 pb-8">
