@@ -3,7 +3,7 @@ import type { Post } from "@/types/post";
 export const initialPosts: Post[] = [
   {
     id: "post-1",
-    title: "Tier Revision Sparks Global Debate Across Shonen Communities",
+    title: "kilas balik perjalanan DBA sebagai penyelenggara event death battle",
     description:
       "Moderator dan scaler dari berbagai forum internasional membuka diskusi baru soal revision speed feats dan cosmology scaling untuk beberapa verse besar.",
     image: "/images/1.jpg",

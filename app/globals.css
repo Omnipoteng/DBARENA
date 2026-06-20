@@ -358,3 +358,39 @@ html[data-ui-theme="dark"] [class*="shadow-[0_"] {
     @apply font-sans;
   }
 }
+
+/* Sidebar Layout & Transitions */
+:root {
+  --sidebar-width: 0px;
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --sidebar-width: 320px; /* 16px left + 288px expanded width + 16px gap */
+  }
+  :root.sidebar-collapsed {
+    --sidebar-width: 120px; /* 16px left + 88px collapsed width + 16px gap */
+  }
+  body {
+    padding-left: var(--sidebar-width);
+    transition: padding-left 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+}
+
+/* Bubble outline particle animation */
+@keyframes bubbleFloat {
+  0% {
+    transform: translate(0, 0) scale(1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate(var(--tx, 0px), var(--ty, 0px)) scale(0.3);
+    opacity: 0;
+  }
+}
+
+.animate-bubble-float {
+  animation: bubbleFloat 800ms cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
+}
+
+

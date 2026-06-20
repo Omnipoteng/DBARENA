@@ -2,7 +2,8 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, useRef, type ReactNode } from "react";
+import { usePathname } from "next/navigation";
 
 const navItems = [
   {
@@ -303,6 +304,174 @@ const drawerItems: DrawerItem[] = [
 
 export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
+  const pathname = usePathname();
+
+  // Floating mobile bubble gesture state
+  const [bubbleX, setBubbleX] = useState(16);
+  const [bubbleY, setBubbleY] = useState(250);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isRadialOpen, setIsRadialOpen] = useState(false);
+  
+  const dragStartX = useRef(0);
+  const dragStartY = useRef(0);
+  const elementStartX = useRef(0);
+  const elementStartY = useRef(0);
+  const hasDragged = useRef(false);
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsDragging(true);
+    dragStartX.current = e.touches[0].clientX;
+    dragStartY.current = e.touches[0].clientY;
+    elementStartX.current = bubbleX;
+    elementStartY.current = bubbleY;
+    hasDragged.current = false;
+    setIsRadialOpen(false); // Close radial menu on drag start
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    const currentX = e.touches[0].clientX;
+    const currentY = e.touches[0].clientY;
+    const diffX = currentX - dragStartX.current;
+    const diffY = currentY - dragStartY.current;
+
+    if (Math.abs(diffX) > 5 || Math.abs(diffY) > 5) {
+      hasDragged.current = true;
+    }
+
+    let newX = elementStartX.current + diffX;
+    let newY = elementStartY.current + diffY;
+
+    // Constrain position to visible screen range
+    const screenWidth = typeof window !== "undefined" ? window.innerWidth : 360;
+    const screenHeight = typeof window !== "undefined" ? window.innerHeight : 800;
+    newX = Math.max(8, Math.min(screenWidth - 56, newX));
+    newY = Math.max(80, Math.min(screenHeight - 100, newY));
+    
+    setBubbleX(newX);
+    setBubbleY(newY);
+  };
+
+  const handleTouchEnd = () => {
+    setIsDragging(false);
+    
+    // Snap to nearest horizontal edge (left or right side)
+    const screenWidth = typeof window !== "undefined" ? window.innerWidth : 360;
+    const isLeftHalf = bubbleX < screenWidth / 2;
+    
+    if (isLeftHalf) {
+      setBubbleX(16);
+    } else {
+      setBubbleX(screenWidth - 64); // width of bubble (48px) + offset (16px) = 64px from right boundary
+    }
+  };
+
+  const handleBubbleClick = (e: React.MouseEvent) => {
+    if (!hasDragged.current) {
+      e.stopPropagation();
+      setIsRadialOpen((prev) => !prev);
+    }
+  };
+
+  // Radial menu item labels and filtering
+  const radialLabels = ["Home", "Profile", "Friends", "Leaderboard"];
+  const radialItems = navItems.filter((item) => radialLabels.includes(item.label));
+
+  // Radial positions calculation with edge adjustments to prevent overflow
+  const getRadialPositions = () => {
+    const screenWidth = typeof window !== "undefined" ? window.innerWidth : 360;
+    const screenHeight = typeof window !== "undefined" ? window.innerHeight : 800;
+    const isLeft = bubbleX < screenWidth / 2;
+    const R = 80; // Radial distance from main bubble center
+
+    let baseAngle = isLeft ? 0 : Math.PI;
+
+    // Shift arc center if bubble is near top or bottom to keep items on-screen
+    const marginY = 140;
+    if (bubbleY < marginY) {
+      baseAngle += isLeft ? Math.PI / 6 : -Math.PI / 6;
+    } else if (bubbleY > screenHeight - marginY) {
+      baseAngle += isLeft ? -Math.PI / 6 : Math.PI / 6;
+    }
+
+    const offsets = [
+      -Math.PI / 3, // -60 degrees
+      -Math.PI / 9, // -20 degrees
+      Math.PI / 9,  // +20 degrees
+      Math.PI / 3,  // +60 degrees
+    ];
+
+    return offsets.map((offset) => {
+      const angle = baseAngle + offset;
+      return {
+        x: Math.cos(angle) * R,
+        y: Math.sin(angle) * R,
+      };
+    });
+  };
+
+  const radialPositions = getRadialPositions();
+
+  // Drawer bubble outline particles state
+  interface BubbleParticle {
+    id: number;
+    x: number;
+    y: number;
+    size: number;
+    tx: number;
+    ty: number;
+    buttonLabel: string;
+  }
+
+  const [particles, setParticles] = useState<BubbleParticle[]>([]);
+  const particleIdCounter = useRef(0);
+
+  const spawnClickBubbles = (label: string, e: React.MouseEvent<HTMLElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+
+    const newParticles: BubbleParticle[] = [];
+    for (let i = 0; i < 8; i++) {
+      particleIdCounter.current += 1;
+      const angle = Math.random() * Math.PI * 2;
+      const distance = 25 + Math.random() * 35;
+
+      newParticles.push({
+        id: particleIdCounter.current,
+        x: clickX,
+        y: clickY,
+        size: 6 + Math.random() * 8,
+        tx: Math.cos(angle) * distance,
+        ty: -Math.random() * 40 - 20,
+        buttonLabel: label,
+      });
+    }
+
+    setParticles((prev) => [...prev, ...newParticles]);
+
+    setTimeout(() => {
+      const idsToRemove = newParticles.map((p) => p.id);
+      setParticles((prev) => prev.filter((p) => !idsToRemove.includes(p.id)));
+    }, 800);
+  };
+
+  useEffect(() => {
+    const stored = localStorage.getItem("sidebar-collapsed");
+    if (stored === "true") {
+      setIsCollapsed(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    if (isCollapsed) {
+      root.classList.add("sidebar-collapsed");
+    } else {
+      root.classList.remove("sidebar-collapsed");
+    }
+  }, [isCollapsed]);
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
@@ -337,47 +506,387 @@ export default function Navbar() {
     setIsOpen(false);
   };
 
-  return (
-    <header className="sticky top-0 z-50 border-b border-black/8 bg-white/88 backdrop-blur-xl">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6 lg:px-8">
-        <Link
-          href="/"
-          className="inline-flex items-center transition duration-300 hover:opacity-70"
-        >
-          <span className="font-sans text-[18px] font-black text-black sm:text-[20px]">
-            DBARENA
-          </span>
-        </Link>
+  const handleToggleCollapse = (collapsed: boolean) => {
+    setIsCollapsed(collapsed);
+    localStorage.setItem("sidebar-collapsed", String(collapsed));
+  };
 
-        <button
-          type="button"
-          onClick={() => setIsOpen((current) => !current)}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-black/10 bg-white text-black shadow-[0_8px_24px_rgba(0,0,0,0.05)] transition duration-300 hover:scale-105 hover:bg-black hover:text-white"
-          aria-expanded={isOpen}
-          aria-label="Toggle navigation menu"
+  const isLinkActive = (href: string) => {
+    if (href === "/#home" || href === "/") {
+      return pathname === "/";
+    }
+    const baseHref = href.split(/[?#]/)[0];
+    if (baseHref === "") return false;
+    return pathname.startsWith(baseHref);
+  };
+
+  const getBadge = (label: string) => {
+    if (label === "Friends") return "3";
+    if (label === "Marketplace") return "New";
+    if (label === "DBA Token") return "HOT";
+    return null;
+  };
+
+  const renderMenuItem = (item: DrawerItem, isCollapsedView: boolean) => {
+    const isActive = item.kind === "link" && isLinkActive(item.href);
+    const badge = getBadge(item.label);
+
+    const content = (
+      <>
+        <svg
+          className={`w-5 h-5 shrink-0 transition-colors ${
+            isActive
+              ? "text-black dark:text-white"
+              : "text-black/60 dark:text-white/60 group-hover:text-black dark:group-hover:text-white"
+          }`}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
         >
-          <span className="flex flex-col gap-1.5">
-            <span
-              className={`block h-0.5 w-5 bg-current transition duration-300 ${
-                isOpen ? "translate-y-2 rotate-45" : ""
-              }`}
-            />
-            <span
-              className={`block h-0.5 w-5 bg-current transition duration-300 ${
-                isOpen ? "opacity-0" : ""
-              }`}
-            />
-            <span
-              className={`block h-0.5 w-5 bg-current transition duration-300 ${
-                isOpen ? "-translate-y-2 -rotate-45" : ""
-              }`}
-            />
+          {item.icon}
+        </svg>
+        {!isCollapsedView && (
+          <span className="text-sm font-semibold tracking-[0.06em] truncate">
+            {item.label}
           </span>
+        )}
+        {badge && (
+          isCollapsedView ? (
+            <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-black dark:bg-white animate-pulse" />
+          ) : (
+            <span className="ml-auto px-2 py-0.5 rounded-md bg-black dark:bg-white text-[9px] font-bold text-white dark:text-black uppercase tracking-wider">
+              {badge}
+            </span>
+          )
+        )}
+
+        {/* Floating click bubbles animation wrapper */}
+        <span className="pointer-events-none absolute inset-0 overflow-hidden rounded-2xl">
+          {particles
+            .filter((p) => p.buttonLabel === item.label)
+            .map((p) => (
+              <span
+                key={p.id}
+                style={{
+                  left: `${p.x}px`,
+                  top: `${p.y}px`,
+                  width: `${p.size}px`,
+                  height: `${p.size}px`,
+                  "--tx": `${p.tx}px`,
+                  "--ty": `${p.ty}px`,
+                } as React.CSSProperties}
+                className="absolute rounded-full border border-black/15 dark:border-white/30 bg-black/[0.03] dark:bg-white/10 opacity-80 animate-bubble-float pointer-events-none"
+              />
+            ))}
+        </span>
+      </>
+    );
+
+    const baseClasses = `relative flex items-center gap-3 rounded-2xl transition duration-300 group ${
+      isCollapsedView ? "w-12 h-12 justify-center mx-auto" : "px-4 py-3.5 w-full"
+    } ${
+      isActive
+        ? "bg-black/8 dark:bg-white/12 text-black dark:text-white shadow-sm border border-black/8 dark:border-white/10"
+        : "text-black/70 dark:text-white/70 hover:bg-black/5 dark:hover:bg-white/5 hover:text-black dark:hover:text-white"
+    }`;
+
+    if (item.kind === "link") {
+      const handleLinkClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+        spawnClickBubbles(item.label, e);
+        setTimeout(() => {
+          setIsOpen(false);
+        }, 250);
+      };
+
+      return (
+        <Link
+          key={item.label}
+          href={item.href}
+          onClick={handleLinkClick}
+          className={baseClasses}
+        >
+          {content}
+        </Link>
+      );
+    } else {
+      const handleActionClick = (e: React.MouseEvent<HTMLButtonElement>) => {
+        spawnClickBubbles(item.label, e);
+        setTimeout(() => {
+          openDailyLogin();
+        }, 250);
+      };
+
+      return (
+        <button
+          key={item.label}
+          type="button"
+          onClick={handleActionClick}
+          className={baseClasses}
+        >
+          {content}
         </button>
+      );
+    }
+  };
+
+  const generalLabels = ["Home", "Dashboard", "Profile", "Friends", "Leaderboard", "Ranked", "Community"];
+  const toolsLabels = ["DBA Token", "Marketplace", "Library", "Terminology", "Token", "Settings", "FAQ"];
+  const updatesLabels = ["News", "Events", "Gallery"];
+
+  const generalItems = drawerItems.filter((item) => generalLabels.includes(item.label));
+  const toolsItems = drawerItems.filter((item) => toolsLabels.includes(item.label));
+  const updatesItems = drawerItems.filter((item) => updatesLabels.includes(item.label));
+
+  const renderSidebarContent = (isCollapsedView: boolean, isMobileView: boolean) => {
+    return (
+      <div className="flex flex-col h-full bg-white dark:bg-[#121212] text-black dark:text-white">
+        {isCollapsedView ? (
+          <div className="flex flex-col items-center py-5 shrink-0 border-b border-black/8 dark:border-white/8">
+            <button
+              type="button"
+              onClick={() => handleToggleCollapse(false)}
+              className="w-10 h-10 flex items-center justify-center rounded-xl bg-black/5 dark:bg-white/5 hover:bg-black/10 dark:hover:bg-white/10 text-black dark:text-white border border-black/10 dark:border-white/10 transition duration-300 cursor-pointer"
+              aria-label="Expand sidebar"
+            >
+              <svg className="w-6 h-6 text-black dark:text-white shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="3" y="3" width="8" height="8" rx="2.5" />
+                <rect x="13" y="3" width="8" height="8" rx="2.5" />
+                <rect x="3" y="13" width="8" height="8" rx="2.5" />
+                <rect x="13" y="13" width="8" height="8" rx="2.5" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between px-5 py-4 shrink-0 border-b border-black/8 dark:border-white/8">
+            <div className="flex items-center gap-3">
+              <svg className="w-8 h-8 text-black dark:text-white shrink-0" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="3" y="3" width="8" height="8" rx="2.5" />
+                <rect x="13" y="3" width="8" height="8" rx="2.5" />
+                <rect x="3" y="13" width="8" height="8" rx="2.5" />
+                <rect x="13" y="13" width="8" height="8" rx="2.5" />
+              </svg>
+              <span className="font-sans text-[20px] font-black tracking-wider text-black dark:text-white">
+                DBARENA
+              </span>
+            </div>
+            {!isMobileView ? (
+              <button
+                type="button"
+                onClick={() => handleToggleCollapse(true)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/80 dark:text-white/80 hover:bg-black/10 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition duration-300 cursor-pointer"
+                aria-label="Collapse sidebar"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M18.75 19.5l-7.5-7.5 7.5-7.5m-6 15L5.25 12l7.5-7.5" />
+                </svg>
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setIsOpen(false)}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/80 dark:text-white/80 hover:bg-black/10 dark:hover:bg-white/10 hover:text-black dark:hover:text-white transition duration-300 cursor-pointer"
+                aria-label="Close sidebar"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            )}
+          </div>
+        )}
+
+        {isCollapsedView ? (
+          <div className="flex flex-col items-center py-4 shrink-0 border-b border-black/8 dark:border-white/8">
+            <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-black/30 dark:text-white/30 mb-1">Stores</p>
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-black to-neutral-700 dark:from-white dark:to-neutral-300 text-white dark:text-black flex items-center justify-center font-bold text-base shadow-sm cursor-pointer hover:scale-105 transition duration-300">
+              D
+            </div>
+            <svg className="w-3 h-3 text-black/40 dark:text-white/40 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+            </svg>
+          </div>
+        ) : (
+          <div className="px-4 py-4 shrink-0 border-b border-black/8 dark:border-white/8">
+            <div className="flex items-center justify-between p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/5 border border-black/8 dark:border-white/8 cursor-pointer hover:bg-black/[0.06] dark:hover:bg-white/8 transition duration-300">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-tr from-black to-neutral-700 dark:from-white dark:to-neutral-300 text-white dark:text-black flex items-center justify-center font-bold text-base shadow-sm">
+                  D
+                </div>
+                <div className="min-w-0 text-left">
+                  <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-black/45 dark:text-white/45">Stores</p>
+                  <p className="text-sm font-bold text-black dark:text-white truncate leading-tight">DBARENA</p>
+                </div>
+              </div>
+              <svg className="w-4 h-4 text-black/50 dark:text-white/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 overflow-y-auto no-scrollbar px-3 py-4 space-y-6">
+          {generalItems.length > 0 && (
+            <div>
+              <p className={isCollapsedView ? "text-[9px] uppercase tracking-[0.15em] font-black text-black/25 dark:text-white/25 mb-3 text-center truncate px-1" : "text-[10px] uppercase tracking-[0.2em] font-black text-black/35 dark:text-white/35 mb-2.5 px-4"}>
+                General
+              </p>
+              <nav className="space-y-1">
+                {generalItems.map((item) => renderMenuItem(item, isCollapsedView))}
+              </nav>
+            </div>
+          )}
+
+          {toolsItems.length > 0 && (
+            <div>
+              <p className={isCollapsedView ? "text-[9px] uppercase tracking-[0.15em] font-black text-black/25 dark:text-white/25 mb-3 text-center truncate px-1" : "text-[10px] uppercase tracking-[0.2em] font-black text-black/35 dark:text-white/35 mb-2.5 px-4"}>
+                Tools
+              </p>
+              <nav className="space-y-1">
+                {toolsItems.map((item) => renderMenuItem(item, isCollapsedView))}
+              </nav>
+            </div>
+          )}
+
+          {updatesItems.length > 0 && (
+            <div>
+              <p className={isCollapsedView ? "text-[9px] uppercase tracking-[0.15em] font-black text-black/25 dark:text-white/25 mb-3 text-center truncate px-1" : "text-[10px] uppercase tracking-[0.2em] font-black text-black/35 dark:text-white/35 mb-2.5 px-4"}>
+                Updates
+              </p>
+              <nav className="space-y-1">
+                {updatesItems.map((item) => renderMenuItem(item, isCollapsedView))}
+              </nav>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <>
+      {/* Mobile Top Header (Intact) */}
+      <header className="sticky top-0 z-50 border-b border-black/8 bg-white/88 backdrop-blur-xl lg:hidden">
+        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
+          <Link
+            href="/"
+            className="inline-flex items-center transition duration-300 hover:opacity-70"
+          >
+            <span className="font-sans text-[18px] font-black text-black sm:text-[20px]">
+              DBARENA
+            </span>
+          </Link>
+
+          <button
+            type="button"
+            onClick={() => setIsOpen((current) => !current)}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-black/10 bg-white text-black shadow-[0_8px_24px_rgba(0,0,0,0.05)] transition duration-300 hover:scale-105 hover:bg-black hover:text-white"
+            aria-expanded={isOpen}
+            aria-label="Toggle navigation menu"
+          >
+            <span className="flex flex-col gap-1.5">
+              <span
+                className={`block h-0.5 w-5 bg-current transition duration-300 ${
+                  isOpen ? "translate-y-2 rotate-45" : ""
+                }`}
+              />
+              <span
+                className={`block h-0.5 w-5 bg-current transition duration-300 ${
+                  isOpen ? "opacity-0" : ""
+                }`}
+              />
+              <span
+                className={`block h-0.5 w-5 bg-current transition duration-300 ${
+                  isOpen ? "-translate-y-2 -rotate-45" : ""
+                }`}
+              />
+            </span>
+          </button>
+        </div>
+      </header>
+
+      {/* Radial Menu Backdrop Overlay */}
+      {isRadialOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-30 bg-black/10 dark:bg-black/25 backdrop-blur-[1.5px] transition-all duration-300 animate-in fade-in"
+          onClick={() => setIsRadialOpen(false)}
+        />
+      )}
+
+      {/* Radial Menu Buttons */}
+      {radialItems.map((item, index) => {
+        const pos = radialPositions[index] || { x: 0, y: 0 };
+        return (
+          <Link
+            key={item.label}
+            href={item.href}
+            onClick={() => setIsRadialOpen(false)}
+            style={{
+              left: `${bubbleX + 2}px`,
+              top: `${bubbleY + 2}px`,
+              transform: isRadialOpen
+                ? `translate(${pos.x}px, ${pos.y}px) scale(1)`
+                : `translate(0px, 0px) scale(0)`,
+              opacity: isRadialOpen ? 1 : 0,
+              transitionDelay: isRadialOpen ? `${index * 60}ms` : "0ms",
+              pointerEvents: isRadialOpen ? "auto" : "none",
+              transitionTimingFunction: "cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+            }}
+            className="lg:hidden fixed z-40 w-11 h-11 rounded-full bg-white dark:bg-[#1a1a1a] border border-black/10 dark:border-white/10 flex items-center justify-center shadow-lg transition-all duration-300 hover:scale-105 active:scale-95 group"
+          >
+            <svg className="w-5 h-5 text-black dark:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+              {item.icon}
+            </svg>
+            <span className="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[9px] font-black tracking-wider text-black/60 dark:text-white/60 bg-white/95 dark:bg-[#121212]/95 border border-black/5 dark:border-white/5 px-2 py-0.5 rounded-full shadow-sm pointer-events-none uppercase scale-90">
+              {item.label}
+            </span>
+          </Link>
+        );
+      })}
+
+      {/* Mobile AssistiveTouch Draggable Floating Toggle Widget */}
+      <div
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onClick={handleBubbleClick}
+        style={{
+          left: `${bubbleX}px`,
+          top: `${bubbleY}px`,
+        }}
+        className={`lg:hidden fixed z-40 w-12 h-12 rounded-full bg-white dark:bg-[#121212] border border-black/10 dark:border-white/10 flex items-center justify-center shadow-[0_8px_30px_rgba(0,0,0,0.12)] cursor-pointer select-none active:scale-90 touch-none ${
+          isDragging ? "opacity-90 scale-105" : "opacity-60 hover:opacity-90 transition-all duration-300"
+        }`}
+      >
+        <div className="relative w-5 h-5 flex items-center justify-center pointer-events-none">
+          <svg
+            className={`absolute w-5 h-5 text-black dark:text-white transition-all duration-300 ${
+              isRadialOpen ? "opacity-0 rotate-90 scale-50" : "opacity-100 rotate-0 scale-100"
+            }`}
+            viewBox="0 0 24 24"
+            fill="currentColor"
+          >
+            <rect x="3" y="3" width="8" height="8" rx="2.5" />
+            <rect x="13" y="3" width="8" height="8" rx="2.5" />
+            <rect x="3" y="13" width="8" height="8" rx="2.5" />
+            <rect x="13" y="13" width="8" height="8" rx="2.5" />
+          </svg>
+          <svg
+            className={`absolute w-5 h-5 text-black dark:text-white transition-all duration-300 ${
+              isRadialOpen ? "opacity-100 rotate-0 scale-100" : "opacity-0 -rotate-90 scale-50"
+            }`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </div>
       </div>
 
+      {/* Mobile Drawer (Styled as a floating iOS Card sheet) */}
       <div
-        className={`fixed inset-0 z-[60] transition duration-300 ${
+        className={`lg:hidden fixed inset-0 z-[60] transition duration-300 ${
           isOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
         }`}
         aria-hidden={!isOpen}
@@ -385,94 +894,30 @@ export default function Navbar() {
         <button
           type="button"
           onClick={() => setIsOpen(false)}
-          className="absolute inset-0 bg-black/35 backdrop-blur-[2px]"
+          className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
           aria-label="Close navigation overlay"
         />
 
         <aside
-          className={`absolute left-0 top-0 flex h-[100dvh] w-[82vw] max-w-sm flex-col overflow-y-auto border-r border-black/8 bg-white shadow-2xl transition duration-300 sm:w-[22rem] ${
-            isOpen ? "translate-x-0" : "-translate-x-full"
+          className={`absolute left-4 top-4 bottom-4 flex w-[calc(100vw-32px)] max-w-[288px] flex-col bg-white dark:bg-[#121212] border border-black/10 dark:border-white/10 rounded-[24px] shadow-2xl transition duration-300 ${
+            isOpen ? "translate-x-0 opacity-100" : "-translate-x-[110%] opacity-0"
           }`}
           role="dialog"
           aria-modal="true"
           aria-label="Navigation menu"
         >
-          <div className="border-b border-black/8 px-5 py-4">
-            <div className="flex items-center gap-3 border border-black/8 bg-black/[0.03] px-3 py-3">
-              <div className="relative h-12 w-12 shrink-0 overflow-hidden rounded-full border border-black/10 bg-white">
-                <Image
-                  src="/images/staff/staff-1.svg"
-                  alt="DBA profile avatar"
-                  fill
-                  sizes="48px"
-                  className="object-cover"
-                />
-              </div>
-              <div className="min-w-0">
-                <p className="truncate text-sm font-semibold text-black">DBA Reign</p>
-                <p className="truncate text-xs uppercase tracking-[0.2em] text-black/45">
-                  @dba.reign
-                </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  <span className="rounded-full bg-black px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-white">
-                    Legend
-                  </span>
-                  <span className="rounded-full border border-black/10 bg-white px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-black/65">
-                    Legend Border
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-3 rounded-2xl border border-black/8 bg-black/[0.02] px-4 py-3">
-              <p className="text-[11px] uppercase tracking-[0.3em] text-black/35">Token wallet</p>
-              <p className="mt-2 text-sm font-semibold text-black">DBA Token tersedia dari login harian</p>
-            </div>
-          </div>
-
-          <nav className="flex flex-1 flex-col px-4 py-4 pb-8">
-            {drawerItems.map((item, index) =>
-              item.kind === "link" ? (
-                <Link
-                  key={item.label}
-                  href={item.href}
-                  onClick={() => setIsOpen(false)}
-                  className={`flex items-center rounded-2xl px-4 py-4 text-sm font-semibold uppercase tracking-[0.16em] text-black transition duration-300 hover:bg-black/5 ${
-                    index === 0 ? "bg-black/5" : ""
-                  }`}
-                >
-                  <svg
-                    className="mr-3 h-5 w-5 shrink-0 text-black/60"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    {item.icon}
-                  </svg>
-                  {item.label}
-                </Link>
-              ) : (
-                <button
-                  key={item.label}
-                  type="button"
-                  onClick={openDailyLogin}
-                  className="flex items-center rounded-2xl px-4 py-4 text-left text-sm font-semibold uppercase tracking-[0.16em] text-black transition duration-300 hover:bg-black/5"
-                >
-                  <svg
-                    className="mr-3 h-5 w-5 shrink-0 text-black/60"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                  >
-                    {item.icon}
-                  </svg>
-                  {item.label}
-                </button>
-              ),
-            )}
-          </nav>
+          {renderSidebarContent(false, true)}
         </aside>
       </div>
-    </header>
+
+      {/* Desktop Sidebar (Floating Card) */}
+      <aside
+        className={`hidden lg:flex fixed left-4 top-4 bottom-4 z-50 flex-col bg-white dark:bg-[#121212] border border-black/10 dark:border-white/10 rounded-[24px] shadow-2xl transition-all duration-300 overflow-hidden ${
+          isCollapsed ? "w-[88px]" : "w-[288px]"
+        }`}
+      >
+        {renderSidebarContent(isCollapsed, false)}
+      </aside>
+    </>
   );
 }

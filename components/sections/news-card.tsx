@@ -34,7 +34,7 @@ export default function NewsCard({ post }: { post: Post }) {
           <span className="mt-5 inline-flex h-9 items-center justify-center gap-2 border border-black bg-black px-3 text-xs font-semibold uppercase tracking-[0.12em] text-white transition duration-200 group-hover:bg-white group-hover:text-black">
             Baca Selengkapnya
             <svg
-              xmlns="http://www.w3.org/2000/svg"
+              xmlns=""
               className="h-4 w-4"
               fill="none"
               viewBox="0 0 24 24"
