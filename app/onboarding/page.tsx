@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { getSupabaseAuthClient } from "@/lib/supabase-auth";
@@ -14,129 +14,54 @@ import {
 } from "@/lib/supabase-store";
 
 const INTEREST_OPTIONS = [
-  "Anime",
-  "Manga",
-  "Manhwa",
-  "Comic",
-  "Novel",
-  "Game",
-  "Film & TV Series",
-  "Mythology",
-  "SCP",
-  "Original Character (OC)",
+  "Anime", "Manga", "Manhwa", "Comic", "Novel",
+  "Game", "Film & TV Series", "Mythology", "SCP", "Original Character (OC)",
 ];
 
 const TOPIC_OPTIONS = [
-  "Power Scaling",
-  "Speed Scaling",
-  "Cosmology",
-  "Hax & Ability",
-  "IQ / Strategy",
-  "Matchup Analysis",
-  "Death Battle",
-  "Lore Discussion",
+  "Power Scaling", "Speed Scaling", "Cosmology", "Hax & Ability",
+  "IQ / Strategy", "Matchup Analysis", "Death Battle", "Lore Discussion",
 ];
 
 const VERSE_OPTIONS = [
-  "Naruto / Boruto",
-  "Dragon Ball",
-  "One Piece",
-  "Bleach",
-  "Marvel",
-  "DC",
-  "Fate",
-  "Honkai",
-  "Genshin Impact",
-  "Jujutsu Kaisen",
-  "Lainnya",
+  "Naruto / Boruto", "Dragon Ball", "One Piece", "Bleach",
+  "Marvel", "DC", "Fate", "Honkai", "Genshin Impact", "Jujutsu Kaisen", "Lainnya",
 ];
 
 const PROVINCES = [
-  "Aceh",
-  "Sumatera Utara",
-  "Sumatera Barat",
-  "Riau",
-  "Kepulauan Riau",
-  "Jambi",
-  "Sumatera Selatan",
-  "Bangka Belitung",
-  "Bengkulu",
-  "Lampung",
-  "DKI Jakarta",
-  "Jawa Barat",
-  "Banten",
-  "Jawa Tengah",
-  "DI Yogyakarta",
-  "Jawa Timur",
-  "Bali",
-  "Nusa Tenggara Barat",
-  "Nusa Tenggara Timur",
-  "Kalimantan Barat",
-  "Kalimantan Tengah",
-  "Kalimantan Selatan",
-  "Kalimantan Timur",
-  "Kalimantan Utara",
-  "Sulawesi Utara",
-  "Sulawesi Tengah",
-  "Sulawesi Selatan",
-  "Sulawesi Tenggara",
-  "Gorontalo",
-  "Sulawesi Barat",
-  "Maluku",
-  "Maluku Utara",
-  "Papua",
-  "Papua Barat",
-  "Papua Tengah",
-  "Papua Pegunungan",
-  "Papua Selatan",
-  "Papua Barat Daya",
+  "Aceh", "Sumatera Utara", "Sumatera Barat", "Riau", "Kepulauan Riau", "Jambi",
+  "Sumatera Selatan", "Bangka Belitung", "Bengkulu", "Lampung", "DKI Jakarta",
+  "Jawa Barat", "Banten", "Jawa Tengah", "DI Yogyakarta", "Jawa Timur", "Bali",
+  "Nusa Tenggara Barat", "Nusa Tenggara Timur", "Kalimantan Barat", "Kalimantan Tengah",
+  "Kalimantan Selatan", "Kalimantan Timur", "Kalimantan Utara", "Sulawesi Utara",
+  "Sulawesi Tengah", "Sulawesi Selatan", "Sulawesi Tenggara", "Gorontalo",
+  "Sulawesi Barat", "Maluku", "Maluku Utara", "Papua", "Papua Barat",
+  "Papua Tengah", "Papua Pegunungan", "Papua Selatan", "Papua Barat Daya",
 ];
 
 type StepId = 1 | 2 | 3 | 4 | 5;
 
-function StepChip({
-  active,
-  children,
-  onClick,
-}: {
-  active: boolean;
-  children: string;
-  onClick: () => void;
-}) {
+const STEPS = [
+  { id: 1, label: "Minat", hint: "Pilih kategori konten yang kamu sukai" },
+  { id: 2, label: "Debat", hint: "Pilih topik debat yang kamu minati" },
+  { id: 3, label: "Verse", hint: "Pilih universe favorit kamu" },
+  { id: 4, label: "Lokasi", hint: "Opsional — bisa diubah kapan saja" },
+  { id: 5, label: "Selesai", hint: "Tinjau dan simpan preferensi kamu" },
+];
+
+function Tag({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`inline-flex min-h-11 items-center justify-center border px-3 py-2 text-left text-xs font-black uppercase tracking-[0.18em] transition sm:px-4 sm:text-[11px] ${
-        active ? "border-black bg-black text-white" : "border-black/10 bg-white text-black/65 hover:bg-black/[0.03]"
+      className={`inline-flex items-center border px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-colors ${
+        active
+          ? "border-black bg-black text-white"
+          : "border-black/15 bg-white text-black/60 hover:border-black/30 hover:text-black"
       }`}
     >
-      {children}
+      {label}
     </button>
-  );
-}
-
-function SectionBlock({
-  title,
-  subtitle,
-  children,
-}: {
-  title: string;
-  subtitle: string;
-  children: ReactNode;
-}) {
-  return (
-    <section className="border-t border-black/8 py-5">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.42em] text-black/35">{title}</p>
-          <h2 className="mt-1 font-sans text-2xl font-black uppercase tracking-[0.04em] text-black">
-            {subtitle}
-          </h2>
-        </div>
-      </div>
-      <div className="mt-4">{children}</div>
-    </section>
   );
 }
 
@@ -156,29 +81,20 @@ export default function OnboardingPage() {
     let cancelled = false;
 
     const hydrate = async () => {
-      if (!supabase) {
-        router.replace("/login");
-        return;
-      }
+      if (!supabase) { router.replace("/login"); return; }
 
       const { data } = await supabase.auth.getSession();
       if (cancelled) return;
 
       const user = data.session?.user;
-      if (!user) {
-        router.replace("/login");
-        return;
-      }
+      if (!user) { router.replace("/login"); return; }
 
       setDbaUserKey(user.id);
 
       const preferences = await loadSupabaseOnboardingPreferences();
       if (cancelled) return;
 
-      if (preferences?.onboardingCompleted) {
-        router.replace("/profile");
-        return;
-      }
+      if (preferences?.onboardingCompleted) { router.replace("/profile"); return; }
 
       if (preferences) {
         setSelectedInterests(preferences.interests);
@@ -191,20 +107,16 @@ export default function OnboardingPage() {
     };
 
     void hydrate();
-
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [router, supabase]);
 
-  const toggleValue = (value: string, current: string[], setter: (next: string[]) => void) => {
-    setter(current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
+  const toggle = (value: string, current: string[], setter: (next: string[]) => void) => {
+    setter(current.includes(value) ? current.filter((i) => i !== value) : [...current, value]);
   };
 
   const handleSave = async (onboardingCompleted: boolean) => {
     setError(null);
     setSaving(true);
-
     try {
       await saveSupabaseOnboardingPreferences({
         interests: selectedInterests,
@@ -217,20 +129,10 @@ export default function OnboardingPage() {
       const existingProfile = await loadSupabaseProfileSnapshot();
       if (!existingProfile) {
         await saveSupabaseProfileSnapshot({
-          displayName: "Member",
-          username: "member",
-          bio: "",
-          avatarSrc: "",
-          bannerSrc: "",
-          bannerKind: "image",
-          bannerFocus: 50,
-          border: "none",
-          tags: [],
-          rankKey: "Recruit",
-          rankedPoints: 0,
-          highestRank: "Recruit",
-          totalMatch: 0,
-          winRate: 0,
+          displayName: "Member", username: "member", bio: "",
+          avatarSrc: "", bannerSrc: "", bannerKind: "image", bannerFocus: 50,
+          border: "none", tags: [], rankKey: "Recruit", rankedPoints: 0,
+          highestRank: "Recruit", totalMatch: 0, winRate: 0,
         });
       }
 
@@ -245,279 +147,237 @@ export default function OnboardingPage() {
   if (!ready) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-white text-black">
-        <p className="text-sm font-medium text-black/55">Menyiapkan onboarding...</p>
+        <p className="text-sm text-black/40 tracking-widest uppercase">Menyiapkan...</p>
       </main>
     );
   }
 
+  const currentStep = STEPS[step - 1];
+
   return (
-    <main className="min-h-screen bg-white text-black">
-      <div className="mx-auto flex min-h-screen w-full max-w-6xl flex-col px-4 py-4 sm:px-6 lg:px-8">
-        <header className="flex items-center justify-between border-b border-black/8 pb-4">
-          <Link href="/" className="font-sans text-xl font-black uppercase tracking-[0.12em] sm:text-2xl">
+    <main className="flex min-h-screen flex-col bg-white text-black selection:bg-black selection:text-white">
+      {/* Top bar */}
+      <header className="absolute left-0 top-0 w-full p-6 sm:p-10 z-10">
+        <div className="flex items-center justify-between">
+          <Link
+            href="/"
+            className="text-lg font-black uppercase tracking-[0.2em] transition-opacity hover:opacity-70"
+          >
             DBARENA
           </Link>
           <button
             type="button"
             onClick={() => handleSave(true)}
             disabled={saving}
-            className="inline-flex h-10 items-center justify-center border-b border-black/10 px-4 text-sm font-semibold text-black/65 transition hover:bg-black/[0.03] disabled:opacity-50"
+            className="text-[11px] font-semibold uppercase tracking-widest text-black/50 transition-colors hover:text-black disabled:opacity-30"
           >
-            Lewati
+            Lewati →
           </button>
-        </header>
-
-        <div className="flex items-center gap-2 border-b border-black/8 py-4">
-          {[1, 2, 3, 4, 5].map((item) => (
-            <div
-              key={item}
-              className={`h-1 flex-1 ${step >= item ? "bg-black" : "bg-black/10"}`}
-              aria-hidden="true"
-            />
-          ))}
         </div>
+      </header>
 
-        <div className="grid flex-1 gap-6 py-6 lg:grid-cols-[1.05fr_0.95fr] lg:gap-12">
-          <div className="space-y-6">
-            <div className="space-y-3">
-              <p className="text-[10px] uppercase tracking-[0.42em] text-black/35">Preference setup</p>
-              <h1 className="max-w-xl font-sans text-4xl font-black uppercase tracking-[0.04em] sm:text-5xl">
-                Bantu kami kenali minatmu.
-              </h1>
-              <p className="max-w-2xl text-sm leading-7 text-black/60">
-                Pilih preferensi untuk menyesuaikan feed, rekomendasi, dan topik yang relevan dengan akun DBA-mu.
-              </p>
-            </div>
+      {/* Progress bar */}
+      <div className="absolute top-0 left-0 w-full h-0.5 bg-black/10">
+        <div
+          className="h-full bg-black transition-all duration-500 ease-in-out"
+          style={{ width: `${(step / 5) * 100}%` }}
+        />
+      </div>
 
-            <div className="space-y-4 border-t border-black/8 pt-4">
-              <div className="flex flex-wrap gap-2">
+      {/* Main layout */}
+      <div className="flex flex-1 pt-24 sm:pt-28">
+        {/* Left sidebar — step nav */}
+        <nav className="hidden lg:flex w-56 flex-shrink-0 flex-col justify-center border-r border-black/8 px-8 py-12">
+          <p className="mb-6 text-[10px] font-semibold uppercase tracking-widest text-black/35">Setup</p>
+          <ol className="space-y-1">
+            {STEPS.map((s) => (
+              <li key={s.id}>
                 <button
                   type="button"
-                  onClick={() => setStep(1)}
-                  className={`h-10 border-b px-4 text-xs font-black uppercase tracking-[0.22em] ${
-                    step === 1 ? "border-black bg-black text-white" : "border-black/10 bg-white text-black/55"
+                  onClick={() => setStep(s.id as StepId)}
+                  className={`flex w-full items-center gap-3 px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider transition-colors ${
+                    step === s.id
+                      ? "text-black"
+                      : step > s.id
+                      ? "text-black/40"
+                      : "text-black/25"
                   }`}
                 >
-                  Minat
+                  <span
+                    className={`flex h-5 w-5 flex-shrink-0 items-center justify-center border text-[10px] font-black transition-colors ${
+                      step === s.id
+                        ? "border-black bg-black text-white"
+                        : step > s.id
+                        ? "border-black/30 text-black/40"
+                        : "border-black/10 text-black/20"
+                    }`}
+                  >
+                    {step > s.id ? "✓" : s.id}
+                  </span>
+                  {s.label}
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setStep(2)}
-                  className={`h-10 border-b px-4 text-xs font-black uppercase tracking-[0.22em] ${
-                    step === 2 ? "border-black bg-black text-white" : "border-black/10 bg-white text-black/55"
-                  }`}
-                >
-                  Debat
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStep(3)}
-                  className={`h-10 border-b px-4 text-xs font-black uppercase tracking-[0.22em] ${
-                    step === 3 ? "border-black bg-black text-white" : "border-black/10 bg-white text-black/55"
-                  }`}
-                >
-                  Verse
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStep(4)}
-                  className={`h-10 border-b px-4 text-xs font-black uppercase tracking-[0.22em] ${
-                    step === 4 ? "border-black bg-black text-white" : "border-black/10 bg-white text-black/55"
-                  }`}
-                >
-                  Lokasi
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStep(5)}
-                  className={`h-10 border-b px-4 text-xs font-black uppercase tracking-[0.22em] ${
-                    step === 5 ? "border-black bg-black text-white" : "border-black/10 bg-white text-black/55"
-                  }`}
-                >
-                  Selesai
-                </button>
-              </div>
+              </li>
+            ))}
+          </ol>
+        </nav>
 
-              {step === 1 ? (
-                <SectionBlock title="Step 1" subtitle="Minat utama">
-                  <div className="flex flex-wrap gap-2">
-                    {INTEREST_OPTIONS.map((option) => (
-                      <StepChip
-                        key={option}
-                        active={selectedInterests.includes(option)}
-                        onClick={() => toggleValue(option, selectedInterests, setSelectedInterests)}
-                      >
-                        {option}
-                      </StepChip>
-                    ))}
-                  </div>
-                </SectionBlock>
-              ) : null}
-
-              {step === 2 ? (
-                <SectionBlock title="Step 2" subtitle="Topik debat favorit">
-                  <div className="flex flex-wrap gap-2">
-                    {TOPIC_OPTIONS.map((option) => (
-                      <StepChip
-                        key={option}
-                        active={selectedTopics.includes(option)}
-                        onClick={() => toggleValue(option, selectedTopics, setSelectedTopics)}
-                      >
-                        {option}
-                      </StepChip>
-                    ))}
-                  </div>
-                </SectionBlock>
-              ) : null}
-
-              {step === 3 ? (
-                <SectionBlock title="Step 3" subtitle="Verse favorit">
-                  <div className="flex flex-wrap gap-2">
-                    {VERSE_OPTIONS.map((option) => (
-                      <StepChip
-                        key={option}
-                        active={selectedVerses.includes(option)}
-                        onClick={() => toggleValue(option, selectedVerses, setSelectedVerses)}
-                      >
-                        {option}
-                      </StepChip>
-                    ))}
-                  </div>
-                </SectionBlock>
-              ) : null}
-
-              {step === 4 ? (
-                <SectionBlock title="Step 4" subtitle="Lokasi opsional">
-                  <div className="max-w-md">
-                    <label className="block">
-                      <span className="mb-2 block text-[10px] font-black uppercase tracking-[0.34em] text-black/45">
-                        Provinsi
-                      </span>
-                      <select
-                        value={location}
-                        onChange={(event) => setLocation(event.target.value)}
-                        className="h-12 w-full border-b border-black/10 bg-transparent px-1 text-sm text-black outline-none transition focus:border-black/35"
-                      >
-                        <option value="">Lewati</option>
-                        {PROVINCES.map((province) => (
-                          <option key={province} value={province}>
-                            {province}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <p className="mt-2 text-xs leading-5 text-black/45">
-                      Lokasi tidak wajib diisi. Bisa diubah nanti dari profile atau settings.
-                    </p>
-                  </div>
-                </SectionBlock>
-              ) : null}
-
-              {step === 5 ? (
-                <SectionBlock title="Step 5" subtitle="Selesai">
-                  <div className="grid gap-4 border-b border-black/8 pb-4 md:grid-cols-3">
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.34em] text-black/35">Minat</p>
-                      <p className="mt-2 text-sm leading-6 text-black/70">
-                        {selectedInterests.length > 0 ? selectedInterests.join(", ") : "Belum dipilih"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.34em] text-black/35">Debat</p>
-                      <p className="mt-2 text-sm leading-6 text-black/70">
-                        {selectedTopics.length > 0 ? selectedTopics.join(", ") : "Belum dipilih"}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] uppercase tracking-[0.34em] text-black/35">Verse / Lokasi</p>
-                      <p className="mt-2 text-sm leading-6 text-black/70">
-                        {selectedVerses.length > 0 ? selectedVerses.join(", ") : "Belum dipilih"}
-                        <br />
-                        {location ? location : "Lokasi dilewati"}
-                      </p>
-                    </div>
-                  </div>
-                  <p className="mt-4 max-w-2xl text-sm leading-7 text-black/60">
-                    Klik simpan untuk menandai onboarding selesai. Setelah itu profile akan langsung memakai data
-                    Supabase yang sama.
-                  </p>
-                </SectionBlock>
-              ) : null}
-            </div>
+        {/* Center — content */}
+        <div className="flex flex-1 flex-col px-6 py-8 sm:px-10 lg:px-16 lg:py-12 max-w-2xl">
+          {/* Step header */}
+          <div className="mb-8">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">
+              Langkah {step} dari 5
+            </p>
+            <h1 className="mt-2 text-3xl font-black uppercase tracking-tight sm:text-4xl">
+              {currentStep.label}
+            </h1>
+            <p className="mt-1.5 text-sm text-black/55">{currentStep.hint}</p>
           </div>
 
-          <aside className="space-y-4 border-t border-black/8 pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
-            <div className="border-b border-black/8 pb-4">
-              <p className="text-[10px] uppercase tracking-[0.34em] text-black/35">Preview</p>
-              <p className="mt-2 text-lg font-black uppercase tracking-[0.06em] text-black">Preferensi kamu</p>
-            </div>
+          {/* Step content */}
+          <div className="flex-1">
+            {step === 1 && (
+              <div className="flex flex-wrap gap-2">
+                {INTEREST_OPTIONS.map((opt) => (
+                  <Tag key={opt} label={opt} active={selectedInterests.includes(opt)}
+                    onClick={() => toggle(opt, selectedInterests, setSelectedInterests)} />
+                ))}
+              </div>
+            )}
 
-            <div className="space-y-4">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.34em] text-black/35">Minat dipilih</p>
-                <p className="mt-2 text-sm leading-6 text-black/70">
-                  {selectedInterests.length > 0 ? selectedInterests.join(" · ") : "Belum ada pilihan"}
+            {step === 2 && (
+              <div className="flex flex-wrap gap-2">
+                {TOPIC_OPTIONS.map((opt) => (
+                  <Tag key={opt} label={opt} active={selectedTopics.includes(opt)}
+                    onClick={() => toggle(opt, selectedTopics, setSelectedTopics)} />
+                ))}
+              </div>
+            )}
+
+            {step === 3 && (
+              <div className="flex flex-wrap gap-2">
+                {VERSE_OPTIONS.map((opt) => (
+                  <Tag key={opt} label={opt} active={selectedVerses.includes(opt)}
+                    onClick={() => toggle(opt, selectedVerses, setSelectedVerses)} />
+                ))}
+              </div>
+            )}
+
+            {step === 4 && (
+              <div className="max-w-xs space-y-4">
+                <div className="space-y-1.5">
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-black/70">
+                    Provinsi
+                  </label>
+                  <select
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    className="h-11 w-full border-b border-black/20 bg-transparent text-sm text-black outline-none transition-colors focus:border-black"
+                  >
+                    <option value="">Pilih provinsi...</option>
+                    {PROVINCES.map((p) => (
+                      <option key={p} value={p}>{p}</option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-xs text-black/40">
+                  Lokasi tidak wajib. Bisa diubah kapan saja dari profil.
                 </p>
               </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.34em] text-black/35">Topik debat</p>
-                <p className="mt-2 text-sm leading-6 text-black/70">
-                  {selectedTopics.length > 0 ? selectedTopics.join(" · ") : "Belum ada pilihan"}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.34em] text-black/35">Verse favorit</p>
-                <p className="mt-2 text-sm leading-6 text-black/70">
-                  {selectedVerses.length > 0 ? selectedVerses.join(" · ") : "Belum ada pilihan"}
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.34em] text-black/35">Lokasi</p>
-                <p className="mt-2 text-sm leading-6 text-black/70">{location || "Dilewati"}</p>
-              </div>
-            </div>
+            )}
 
-            {error ? <p className="border-b border-black/8 pb-3 text-sm text-black/65">{error}</p> : null}
+            {step === 5 && (
+              <div className="space-y-5">
+                <p className="text-sm text-black/55 leading-6">
+                  Preferensi kamu sudah siap disimpan. Klik <strong className="text-black">Simpan & Mulai</strong> untuk masuk ke profil.
+                </p>
+                <div className="divide-y divide-black/8 border-y border-black/8">
+                  {[
+                    { label: "Minat", value: selectedInterests.join(", ") || "Belum dipilih" },
+                    { label: "Topik Debat", value: selectedTopics.join(", ") || "Belum dipilih" },
+                    { label: "Verse Favorit", value: selectedVerses.join(", ") || "Belum dipilih" },
+                    { label: "Lokasi", value: location || "Dilewati" },
+                  ].map(({ label, value }) => (
+                    <div key={label} className="flex gap-4 py-3">
+                      <span className="w-28 flex-shrink-0 text-[10px] font-semibold uppercase tracking-widest text-black/40 pt-0.5">
+                        {label}
+                      </span>
+                      <span className="text-sm text-black/75 leading-5">{value}</span>
+                    </div>
+                  ))}
+                </div>
+                {error && (
+                  <div className="border-l-2 border-black bg-black/5 p-3 text-sm text-black">
+                    {error}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
-            <div className="flex flex-col gap-3 pt-2 sm:flex-row">
+          {/* Navigation buttons */}
+          <div className="mt-10 flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => setStep((prev) => (prev > 1 ? ((prev - 1) as StepId) : prev))}
+              disabled={step === 1}
+              className="text-[11px] font-semibold uppercase tracking-widest text-black/50 transition-colors hover:text-black disabled:opacity-20"
+            >
+              ← Kembali
+            </button>
+
+            {step < 5 ? (
               <button
                 type="button"
-                onClick={() => setStep((prev) => (prev > 1 ? ((prev - 1) as StepId) : prev))}
-                className="inline-flex h-11 flex-1 items-center justify-center border-b border-black/10 px-4 text-sm font-semibold text-black/65 transition hover:bg-black/[0.03]"
+                onClick={() => setStep((prev) => ((prev + 1) as StepId))}
+                className="group flex h-11 items-center justify-center gap-2 bg-black px-8 text-sm font-semibold text-white transition-all hover:bg-black/90"
               >
-                Kembali
+                Lanjut
+                <span className="transition-transform group-hover:translate-x-1">→</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setStep((prev) => (prev < 5 ? ((prev + 1) as StepId) : prev))}
-                className="inline-flex h-11 flex-1 items-center justify-center bg-black px-4 text-sm font-semibold text-white transition hover:opacity-90"
-              >
-                {step < 5 ? "Lanjut" : saving ? "Menyimpan..." : "Simpan preference"}
-              </button>
-            </div>
-
-            {step === 5 ? (
-              <div className="flex gap-3">
+            ) : (
               <button
                 type="button"
                 onClick={() => handleSave(true)}
                 disabled={saving}
-                className="inline-flex h-11 flex-1 items-center justify-center border-b border-black/10 px-4 text-sm font-semibold text-black/65 transition hover:bg-black/[0.03] disabled:opacity-50"
+                className="group flex h-11 items-center justify-center gap-2 bg-black px-8 text-sm font-semibold text-white transition-all hover:bg-black/90 disabled:opacity-50"
               >
-                Lewati
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSave(true)}
-                  disabled={saving}
-                  className="inline-flex h-11 flex-1 items-center justify-center bg-black px-4 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
-                >
-                  {saving ? "Menyimpan..." : "Simpan & masuk"}
-                </button>
-              </div>
-            ) : null}
-          </aside>
+                {saving ? "Menyimpan..." : "Simpan & Mulai"}
+                {!saving && <span className="transition-transform group-hover:translate-x-1">→</span>}
+              </button>
+            )}
+          </div>
+
+          {/* Mobile step indicators */}
+          <div className="mt-6 flex items-center justify-center gap-1.5 lg:hidden">
+            {STEPS.map((s) => (
+              <div
+                key={s.id}
+                className={`h-1 transition-all duration-300 ${
+                  step >= s.id ? "w-6 bg-black" : "w-3 bg-black/15"
+                }`}
+              />
+            ))}
+          </div>
         </div>
+
+        {/* Right sidebar — live preview (desktop only) */}
+        <aside className="hidden xl:flex w-64 flex-shrink-0 flex-col justify-center border-l border-black/8 px-8 py-12">
+          <p className="mb-6 text-[10px] font-semibold uppercase tracking-widest text-black/35">Preview</p>
+          <div className="space-y-5">
+            {[
+              { label: "Minat", value: selectedInterests.length ? selectedInterests.join(" · ") : "—" },
+              { label: "Debat", value: selectedTopics.length ? selectedTopics.join(" · ") : "—" },
+              { label: "Verse", value: selectedVerses.length ? selectedVerses.join(" · ") : "—" },
+              { label: "Lokasi", value: location || "—" },
+            ].map(({ label, value }) => (
+              <div key={label} className="border-b border-black/8 pb-4">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-black/35">{label}</p>
+                <p className="mt-1.5 text-xs leading-5 text-black/65 break-words">{value}</p>
+              </div>
+            ))}
+          </div>
+        </aside>
       </div>
     </main>
   );

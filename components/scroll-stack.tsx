@@ -216,28 +216,22 @@ const ScrollStack: React.FC<ScrollStackProps> = ({
 
   const setupLenis = useCallback(() => {
     if (useWindowScroll) {
-      const lenis = new Lenis({
-        duration: 1.2,
-        easing: t => Math.min(1, 1.001 - Math.pow(2, -10 * t)),
-        smoothWheel: true,
-        touchMultiplier: 2,
-        infinite: false,
-        wheelMultiplier: 1,
-        lerp: 0.1,
-        syncTouch: true,
-        syncTouchLerp: 0.075
-      });
-
-      lenis.on('scroll', handleScroll);
-
-      const raf = (time: number) => {
-        lenis.raf(time);
-        animationFrameRef.current = requestAnimationFrame(raf);
+      // Mode window scroll: gunakan native scroll murni — TIDAK menggunakan Lenis
+      // agar tidak mengganggu scroll responsif di bagian halaman lain.
+      let ticking = false;
+      const onScroll = () => {
+        if (!ticking) {
+          ticking = true;
+          animationFrameRef.current = requestAnimationFrame(() => {
+            updateCardTransforms();
+            ticking = false;
+          });
+        }
       };
-      animationFrameRef.current = requestAnimationFrame(raf);
-
-      lenisRef.current = lenis;
-      return lenis;
+      window.addEventListener('scroll', onScroll, { passive: true });
+      // Simpan cleanup fn di lenisRef sebagai workaround
+      (lenisRef as any).current = { destroy: () => window.removeEventListener('scroll', onScroll) };
+      return null;
     } else {
       const scroller = scrollerRef.current;
       if (!scroller) return;
