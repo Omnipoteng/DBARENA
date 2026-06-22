@@ -2,10 +2,11 @@ import type { Metadata, Viewport } from "next";
 import { cookies } from "next/headers";
 import localFont from "next/font/local";
 
-import CookieBanner from "@/components/cookie-banner";
-import DailyLoginPopup from "@/components/daily-login-popup";
-import PageTransitionLoader from "@/components/page-transition-loader";
-import SitePreferencesSync from "@/components/site-preferences-sync";
+import CookieBanner from "@/components/cookie-banner"; 
+import AuthSessionSync from "@/components/auth-session-sync";
+import DailyLoginPopup from "@/components/daily-login-popup"; 
+import PageTransitionLoader from "@/components/page-transition-loader"; 
+import SitePreferencesSync from "@/components/site-preferences-sync"; 
 import PwaInstaller from "@/components/pwa-installer";
 import { PostStoreProvider } from "@/components/post-store-provider";
 import { THEME_COOKIE, readThemeCookieValue } from "@/lib/site-preferences";
@@ -54,15 +55,15 @@ export default async function RootLayout({
       className={cn("h-full", "antialiased", coolvetica.variable, "font-sans", theme === "dark" && "dark")}
       style={{ colorScheme: theme }}
     >
-      <body className="min-h-full bg-background font-sans text-foreground transition-colors duration-300">
-        <PostStoreProvider>{children}</PostStoreProvider>
-        <SitePreferencesSync />
-        <PageTransitionLoader />
-        <DailyLoginPopup />
+      <body className="min-h-full bg-background font-sans text-foreground transition-colors duration-300"> 
+        <PostStoreProvider>{children}</PostStoreProvider> 
+        <AuthSessionSync /> 
+        <SitePreferencesSync /> 
+        <PageTransitionLoader /> 
+        <DailyLoginPopup /> 
         <CookieBanner />
         <PwaInstaller />
       </body>
     </html>
   );
 }
-

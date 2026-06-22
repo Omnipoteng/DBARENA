@@ -2,13 +2,19 @@
 
 import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
-import {
-  formatTokenNumber,
-  readTokenWallet,
-  TOKEN_SHOP_ITEMS,
-  type TokenShopItem,
-  writeTokenWallet,
-} from "@/lib/dba-token";
+import { 
+  formatTokenNumber, 
+  readTokenWallet, 
+  TOKEN_SHOP_ITEMS, 
+  type TokenShopItem, 
+  writeTokenWallet, 
+} from "@/lib/dba-token"; 
+import { 
+  appendSupabaseTokenTransaction, 
+  loadSupabaseInventoryItems, 
+  loadSupabaseTokenWallet, 
+  saveSupabaseTokenWallet, 
+} from "@/lib/supabase-store"; 
 
 type ShopSection = "Rekomendasi" | "Kosmetik" | "Akses" | "Status" | "Vault" | "Semua";
 type PopupState =
@@ -47,16 +53,17 @@ function CardFrame({ children }: { children: React.ReactNode }) {
   return <div className="overflow-hidden rounded-[24px] border border-black/8 bg-white shadow-[0_12px_32px_rgba(0,0,0,0.04)]">{children}</div>;
 }
 
-export default function TokenExchangePage() {
-  const [wallet, setWallet] = useState(() => readTokenWallet());
-  const [activeSection, setActiveSection] = useState<ShopSection>("Rekomendasi");
-  const [message, setMessage] = useState<string | null>(null);
-  const [popup, setPopup] = useState<PopupState>({ kind: "none" });
+export default function TokenExchangePage() { 
+  const [wallet, setWallet] = useState(() => readTokenWallet()); 
+  const [inventoryItems, setInventoryItems] = useState<TokenShopItem[]>(TOKEN_SHOP_ITEMS); 
+  const [activeSection, setActiveSection] = useState<ShopSection>("Rekomendasi"); 
+  const [message, setMessage] = useState<string | null>(null); 
+  const [popup, setPopup] = useState<PopupState>({ kind: "none" }); 
 
-  useEffect(() => {
-    function syncWallet() {
-      setWallet(readTokenWallet());
-    }
+  useEffect(() => { 
+    function syncWallet() { 
+      setWallet(readTokenWallet()); 
+    } 
 
     function handleStorage(event: StorageEvent) {
       if (
@@ -70,12 +77,31 @@ export default function TokenExchangePage() {
       }
     }
 
-    window.addEventListener("storage", handleStorage);
-    window.addEventListener("dba-token-wallet-updated", syncWallet as EventListener);
+    window.addEventListener("storage", handleStorage); 
+    window.addEventListener("dba-token-wallet-updated", syncWallet as EventListener); 
 
-    return () => {
-      window.removeEventListener("storage", handleStorage);
-      window.removeEventListener("dba-token-wallet-updated", syncWallet as EventListener);
+    const hasLocalWallet = 
+      window.localStorage.getItem("dba-token-balance") !== null || 
+      window.localStorage.getItem("dba-token-history") !== null || 
+      window.localStorage.getItem("dba-daily-token-unlocks") !== null; 
+
+    if (!hasLocalWallet) { 
+      void loadSupabaseTokenWallet().then((remoteWallet) => { 
+        if (remoteWallet) { 
+          setWallet(remoteWallet); 
+        } 
+      }); 
+    } 
+
+    void loadSupabaseInventoryItems(TOKEN_SHOP_ITEMS).then((remoteItems) => { 
+      if (remoteItems.length > 0) { 
+        setInventoryItems(remoteItems); 
+      } 
+    }); 
+
+    return () => { 
+      window.removeEventListener("storage", handleStorage); 
+      window.removeEventListener("dba-token-wallet-updated", syncWallet as EventListener); 
     };
   }, []);
 
@@ -99,13 +125,13 @@ export default function TokenExchangePage() {
     };
   }, [popup.kind]);
 
-  const visibleItems = useMemo(() => {
-    if (activeSection === "Semua") return TOKEN_SHOP_ITEMS;
-    if (activeSection === "Rekomendasi") {
-      return TOKEN_SHOP_ITEMS.filter((item) => RECOMMENDED_IDS.has(item.id));
-    }
-    return TOKEN_SHOP_ITEMS.filter((item) => item.category === activeSection);
-  }, [activeSection]);
+  const visibleItems = useMemo(() => { 
+    if (activeSection === "Semua") return inventoryItems; 
+    if (activeSection === "Rekomendasi") { 
+      return inventoryItems.filter((item) => RECOMMENDED_IDS.has(item.id)); 
+    } 
+    return inventoryItems.filter((item) => item.category === activeSection); 
+  }, [activeSection, inventoryItems]); 
 
   const openDailyLogin = () => {
     window.dispatchEvent(new Event("open-daily-login"));
@@ -153,11 +179,18 @@ export default function TokenExchangePage() {
       ].slice(0, 10),
     };
 
-    writeTokenWallet(nextWallet);
-    setWallet(nextWallet);
-    setPopup({
-      kind: "result",
-      status: "success",
+    writeTokenWallet(nextWallet); 
+    setWallet(nextWallet); 
+    void saveSupabaseTokenWallet(nextWallet); 
+    void appendSupabaseTokenTransaction({ 
+      title: item.title, 
+      cost: item.cost, 
+      kind: "redeem", 
+      balanceAfter: nextWallet.balance, 
+    }); 
+    setPopup({ 
+      kind: "result", 
+      status: "success", 
       title: "Pembelian berhasil",
       description: `${item.title} berhasil ditukar. Cek profil atau inventory untuk melihat efeknya.`,
     });

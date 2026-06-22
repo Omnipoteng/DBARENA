@@ -1,8 +1,7 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
-import { useEffect, useState, useRef, type ReactNode } from "react";
+import Link from "next/link"; 
+import { useEffect, useState, useRef, type ReactNode } from "react"; 
 import { usePathname } from "next/navigation";
 
 const navItems = [
@@ -29,6 +28,26 @@ const navItems = [
           strokeLinejoin="round"
           strokeWidth={2}
           d="M5.5 19a6.5 6.5 0 0 1 13 0"
+        />
+      </>
+    ),
+  },
+  {
+    label: "Login",
+    href: "/login",
+    icon: (
+      <>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M10 7V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-2"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M14 12H4m0 0 3-3m-3 3 3 3"
         />
       </>
     ),
@@ -303,8 +322,14 @@ const drawerItems: DrawerItem[] = [
 ];
 
 export default function Navbar() {
-  const [isOpen, setIsOpen] = useState(false);
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [isOpen, setIsOpen] = useState(false); 
+  const [isCollapsed, setIsCollapsed] = useState(() => { 
+    if (typeof window === "undefined") { 
+      return false; 
+    } 
+
+    return localStorage.getItem("sidebar-collapsed") === "true"; 
+  }); 
   const pathname = usePathname();
 
   // Floating mobile bubble gesture state
@@ -427,27 +452,32 @@ export default function Navbar() {
   const [particles, setParticles] = useState<BubbleParticle[]>([]);
   const particleIdCounter = useRef(0);
 
-  const spawnClickBubbles = (label: string, e: React.MouseEvent<HTMLElement>) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = e.clientX - rect.left;
-    const clickY = e.clientY - rect.top;
+  const spawnClickBubbles = (label: string, e: React.MouseEvent<HTMLElement>) => { 
+    const rect = e.currentTarget.getBoundingClientRect(); 
+    const clickX = e.clientX - rect.left; 
+    const clickY = e.clientY - rect.top; 
 
-    const newParticles: BubbleParticle[] = [];
-    for (let i = 0; i < 8; i++) {
-      particleIdCounter.current += 1;
-      const angle = Math.random() * Math.PI * 2;
-      const distance = 25 + Math.random() * 35;
+    const newParticles: BubbleParticle[] = []; 
+    for (let i = 0; i < 8; i++) { 
+      particleIdCounter.current += 1; 
+      const seed = clickX * 12.9898 + clickY * 78.233 + (i + 1) * 37.719; 
+      const pseudoRandom = (offset: number) => { 
+        const value = Math.sin(seed + offset) * 10000; 
+        return value - Math.floor(value); 
+      }; 
+      const angle = pseudoRandom(1) * Math.PI * 2; 
+      const distance = 25 + pseudoRandom(2) * 35; 
 
-      newParticles.push({
-        id: particleIdCounter.current,
-        x: clickX,
-        y: clickY,
-        size: 6 + Math.random() * 8,
-        tx: Math.cos(angle) * distance,
-        ty: -Math.random() * 40 - 20,
-        buttonLabel: label,
-      });
-    }
+      newParticles.push({ 
+        id: particleIdCounter.current, 
+        x: clickX, 
+        y: clickY, 
+        size: 6 + pseudoRandom(3) * 8, 
+        tx: Math.cos(angle) * distance, 
+        ty: -pseudoRandom(4) * 40 - 20, 
+        buttonLabel: label, 
+      }); 
+    } 
 
     setParticles((prev) => [...prev, ...newParticles]);
 
@@ -457,15 +487,8 @@ export default function Navbar() {
     }, 800);
   };
 
-  useEffect(() => {
-    const stored = localStorage.getItem("sidebar-collapsed");
-    if (stored === "true") {
-      setIsCollapsed(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    const root = document.documentElement;
+  useEffect(() => { 
+    const root = document.documentElement; 
     if (isCollapsed) {
       root.classList.add("sidebar-collapsed");
     } else {

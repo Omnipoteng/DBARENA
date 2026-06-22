@@ -2,15 +2,20 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 
-import {
-  applySitePreferences,
-  getDefaultPreferences,
-  readSitePreferences,
-  type SitePreferences,
-  type SiteTheme,
-  writeSitePreferences,
-} from "@/lib/site-preferences";
-import Navbar from "@/components/sections/navbar";
+import { 
+  applySitePreferences, 
+  hasStoredSitePreferences, 
+  getDefaultPreferences, 
+  readSitePreferences, 
+  type SitePreferences, 
+  type SiteTheme, 
+  writeSitePreferences, 
+} from "@/lib/site-preferences"; 
+import { 
+  loadSupabaseSitePreferences, 
+  saveSupabaseSitePreferences, 
+} from "@/lib/supabase-store";
+import Navbar from "@/components/sections/navbar"; 
 
 const SITE_PREFERENCES_EVENT = "site-preferences-change";
 
@@ -134,22 +139,31 @@ function SectionBlock({
 export default function SettingsPage() {
   const [preferences, setPreferences] = useState<SitePreferences>(getDefaultPreferences());
 
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      const stored = readSitePreferences();
-      setPreferences(stored);
-      applySitePreferences(stored);
-    });
+  useEffect(() => { 
+    const frame = window.requestAnimationFrame(() => { 
+      const stored = readSitePreferences(); 
+      setPreferences(stored); 
+      applySitePreferences(stored); 
 
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
+      if (!hasStoredSitePreferences()) {
+        void loadSupabaseSitePreferences(stored).then((remotePreferences) => {
+          setPreferences(remotePreferences);
+          writeSitePreferences(remotePreferences);
+          applySitePreferences(remotePreferences);
+        });
+      }
+    }); 
 
-  const savePreferences = (nextPreferences: SitePreferences) => {
-    setPreferences(nextPreferences);
-    writeSitePreferences(nextPreferences);
-    applySitePreferences(nextPreferences);
-    window.dispatchEvent(new Event(SITE_PREFERENCES_EVENT));
-  };
+    return () => window.cancelAnimationFrame(frame); 
+  }, []); 
+
+  const savePreferences = (nextPreferences: SitePreferences) => { 
+    setPreferences(nextPreferences); 
+    writeSitePreferences(nextPreferences); 
+    applySitePreferences(nextPreferences); 
+    void saveSupabaseSitePreferences(nextPreferences);
+    window.dispatchEvent(new Event(SITE_PREFERENCES_EVENT)); 
+  }; 
 
   const updatePreference = <K extends keyof SitePreferences>(key: K, value: SitePreferences[K]) => {
     savePreferences({ ...preferences, [key]: value });

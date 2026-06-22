@@ -1,20 +1,29 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
-import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import ElectricBorder from "@/components/ElectricBorder";
-import ImageCropper from "@/components/ImageCropper";
+import Link from "next/link"; 
+import { useEffect, useRef, useState, type ChangeEvent } from "react"; 
+import { useRouter } from "next/navigation";
+import ElectricBorder from "@/components/ElectricBorder"; 
+import ImageCropper from "@/components/ImageCropper"; 
 import {
   getProfileBannerVideoKey,
   loadProfileBannerVideo,
   saveProfileBannerVideo,
 } from "@/lib/profile-banner-store";
-import Navbar from "@/components/sections/navbar";
+import { setDbaUserKey } from "@/lib/dba-user";
+import Navbar from "@/components/sections/navbar"; 
+import { getSupabaseAuthClient } from "@/lib/supabase-auth";
+import {
+  loadSupabaseProfileSnapshot,
+  loadSupabaseRankedMatches,
+  saveSupabaseProfileSnapshot,
+} from "@/lib/supabase-store";
 
 type BorderKey = "none" | "legend" | "mythic" | "apex";
 type RankKey = "Recruit" | "Challenger" | "Vanguard" | "Legend" | "Mythic" | "Apex";
 type EditorMode = "name" | "profile" | "border";
+type AccessState = "loading" | "guest" | "onboarding" | "ready";
 
 type BorderTheme = {
   label: string;
@@ -34,31 +43,16 @@ type RankTheme = {
 
 type BannerCrop = { x: number; y: number; zoom: number };
 
-type SavedProfile = {
-  displayName: string;
-  username: string;
-  bio: string;
-  avatarSrc: string;
-  bannerSrc: string;
-  bannerKind: "image" | "video";
-  bannerFocus: number;
-  bannerCrop?: BannerCrop | null;
-  border: BorderKey;
-  tags: string[];
-};
-
 type MatchEntry = {
   opponent: string;
   platform: string;
-  result: "Win" | "Loss";
+  result: "Win" | "Loss" | "Draw" | "No Contest";
   delta: string;
   fromRank: RankKey;
   toRank: RankKey;
   date: string;
   image: string;
 };
-
-const STORAGE_KEY = "dbarena-profile-draft";
 
 const borderThemes: Record<BorderKey, BorderTheme> = {
   none: {
@@ -137,50 +131,10 @@ const rankThemes: Record<RankKey, RankTheme> = {
   },
 };
 
-const profileStats = [
-  { label: "Total Match", value: "184" },
-  { label: "Ranked Points", value: "6,120" },
-  { label: "Highest Rank", value: "Mythic" },
-  { label: "Win Rate", value: "66%" },
-];
-
 const menuItems: Array<{ label: string; kind: "edit"; target: EditorMode }> = [
   { label: "Kustomisasi Border", kind: "edit", target: "border" },
   { label: "Kustomisasi Profil", kind: "edit", target: "profile" },
   { label: "Kustomisasi Nama", kind: "edit", target: "name" },
-];
-
-const matchEntries: MatchEntry[] = [
-  {
-    opponent: "Madara Uchiha",
-    platform: "Discord",
-    result: "Win",
-    delta: "+32",
-    fromRank: "Vanguard",
-    toRank: "Legend",
-    date: "Yesterday",
-    image: "/images/1.jpg",
-  },
-  {
-    opponent: "Gojo Satoru",
-    platform: "WhatsApp",
-    result: "Loss",
-    delta: "-18",
-    fromRank: "Legend",
-    toRank: "Legend",
-    date: "2 days ago",
-    image: "/images/2.jpg",
-  },
-  {
-    opponent: "Ichigo Kurosaki",
-    platform: "Facebook",
-    result: "Win",
-    delta: "+25",
-    fromRank: "Legend",
-    toRank: "Mythic",
-    date: "5 days ago",
-    image: "/images/3.jpg",
-  },
 ];
 
 function resolveRank(points: number): RankKey {
@@ -408,12 +362,11 @@ function EditorModal({
   const [draftAvatar, setDraftAvatar] = useState(avatarSrc);
   const [draftBanner, setDraftBanner] = useState(bannerPreviewUrl ?? (bannerKind === "video" ? "" : bannerSrc));
   const [draftBannerKind, setDraftBannerKind] = useState<"image" | "video">(bannerKind);
-  const [draftBannerFocus, setDraftBannerFocus] = useState(bannerFocus);
+  const [draftBannerFocus] = useState(bannerFocus);
   const [draftBannerCrop, setDraftBannerCrop] = useState<BannerCrop | null>(initialBannerCrop ?? null);
   const [draftTags, setDraftTags] = useState(tags);
   const [nextTag, setNextTag] = useState("");
   const [draftBorder, setDraftBorder] = useState<BorderKey>(selectedBorder);
-  const [draftBannerFile, setDraftBannerFile] = useState<File | null>(null);
   const draftBannerFileRef = useRef<File | null>(null); // always holds the latest value, safe to read in async closures
   const [draftBannerObjectUrl, setDraftBannerObjectUrl] = useState<string | null>(null);
   const [cropTargetUrl, setCropTargetUrl] = useState<string | null>(null);
@@ -462,7 +415,6 @@ function EditorModal({
     };
 
     if (target === "banner") {
-      setDraftBannerFile(null);
       draftBannerFileRef.current = null;
       setDraftBannerObjectUrl(null);
     }
@@ -480,14 +432,13 @@ function EditorModal({
         if (tempEl.duration > 10) {
           setUploadProgress({
             target: "banner",
-            label: "⚠️ Video terlalu panjang! Maksimal 10 detik.",
+            label: "Video terlalu panjang! Maksimal 10 detik.",
             progress: 100,
           });
           window.setTimeout(() => setUploadProgress(null), 3500);
         } else {
           const previewUrl = URL.createObjectURL(file);
           setDraftBannerKind("video");
-          setDraftBannerFile(file);
           draftBannerFileRef.current = file; // update ref immediately so onCropVideo closure sees the correct file
           setCropTargetUrl(previewUrl);
         }
@@ -557,8 +508,6 @@ function EditorModal({
   const removeTag = (tag: string) => {
     setDraftTags((current) => current.filter((item) => item !== tag));
   };
-
-  const focusStyle = (focus: number) => ({ objectPosition: `50% ${focus}%` });
 
   useEffect(() => {
     return () => {
@@ -784,7 +733,7 @@ function EditorModal({
                         clearInterval(interval);
                         setDraftBannerKind("image");
                         setDraftBanner(croppedBase64);
-                        setDraftBannerFile(null);
+                        draftBannerFileRef.current = null;
                         setTimeout(() => setUploadProgress(null), 300);
                       }
                     }, 60);
@@ -935,98 +884,182 @@ function EditorModal({
 }
 
 export default function ProfilePage() {
-  const defaultProfile = {
-  displayName: "DBA Reign",
-  username: "@dba.reign",
-  bio: "Battleboarding profile untuk DBARENA dengan border rank, progress, dan riwayat match yang tetap terasa seperti akun kompetitif modern.",
-  avatarSrc: "/images/staff/staff-1.svg",
-  bannerSrc: "",
-  bannerKind: "image" as const,
-  bannerFocus: 50,
-  border: "legend" as BorderKey,
-  tags: ["Indonesia / Surabaya", "Scaler", "Boruto"],
-};
-
-  const [displayName, setDisplayName] = useState(defaultProfile.displayName);
-  const [username, setUsername] = useState(defaultProfile.username);
-  const [bio, setBio] = useState(defaultProfile.bio);
-  const [avatarSrc, setAvatarSrc] = useState(defaultProfile.avatarSrc);
-  const [bannerSrc, setBannerSrc] = useState(defaultProfile.bannerSrc);
-  const [bannerKind, setBannerKind] = useState<"image" | "video">(defaultProfile.bannerKind);
-  const [bannerFocus, setBannerFocus] = useState(defaultProfile.bannerFocus);
+  const router = useRouter();
+  const [displayName, setDisplayName] = useState("");
+  const [username, setUsername] = useState("");
+  const [bio, setBio] = useState("");
+  const [avatarSrc, setAvatarSrc] = useState("");
+  const [bannerSrc, setBannerSrc] = useState("");
+  const [bannerKind, setBannerKind] = useState<"image" | "video">("image");
+  const [bannerFocus, setBannerFocus] = useState(50);
   const [bannerCrop, setBannerCrop] = useState<BannerCrop | null>(null);
   const [bannerPreviewUrl, setBannerPreviewUrl] = useState<string | null>(null);
-  const [selectedBorder, setSelectedBorder] = useState<BorderKey>(defaultProfile.border);
-  const [tags, setTags] = useState<string[]>(defaultProfile.tags);
+  const [selectedBorder, setSelectedBorder] = useState<BorderKey>("legend");
+  const [tags, setTags] = useState<string[]>([]);
+  const [rankKey, setRankKey] = useState<RankKey>("Recruit");
+  const [rankedPoints, setRankedPoints] = useState(0);
+  const [highestRank, setHighestRank] = useState("Recruit");
+  const [totalMatch, setTotalMatch] = useState(0);
+  const [winRate, setWinRate] = useState(0);
+  const [recentMatches, setRecentMatches] = useState<MatchEntry[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const [editorMode, setEditorMode] = useState<EditorMode | null>(null);
   const [loaded, setLoaded] = useState(false);
+  const [accessState, setAccessState] = useState<AccessState>("loading");
 
-  const rankedPoints = 6120;
-  const currentRank = resolveRank(rankedPoints);
+  const currentRank = rankKey || resolveRank(rankedPoints);
   const rankTheme = rankThemes[currentRank];
   const borderTheme = borderThemes[selectedBorder];
   const rankProgress = getRankProgress(rankedPoints);
+  const profileStats = [
+    { label: "Total Match", value: totalMatch.toLocaleString("en-US") },
+    { label: "Ranked Points", value: new Intl.NumberFormat("en-US").format(rankedPoints) },
+    { label: "Highest Rank", value: highestRank },
+    { label: "Win Rate", value: `${Number.isFinite(winRate) ? winRate.toFixed(0) : "0"}%` },
+  ];
 
   useEffect(() => {
     let cancelled = false;
     let fallbackFrame = 0;
 
     const hydrateProfile = async () => {
-      try {
-        const saved = window.localStorage.getItem(STORAGE_KEY);
-        if (saved) {
-          const parsed = JSON.parse(saved) as Partial<SavedProfile>;
+      const supabase = getSupabaseAuthClient();
+      if (!supabase) {
+        if (!cancelled) {
+          setAccessState("guest");
+          setLoaded(true);
+        }
+        return;
+      }
 
-          if (typeof parsed.displayName === "string") setDisplayName(parsed.displayName);
-          if (typeof parsed.username === "string") setUsername(parsed.username);
-          if (typeof parsed.bio === "string") setBio(parsed.bio);
-          if (typeof parsed.avatarSrc === "string") setAvatarSrc(parsed.avatarSrc);
-          if (typeof parsed.bannerKind === "string" && (parsed.bannerKind === "video" || parsed.bannerKind === "image")) {
-            setBannerKind(parsed.bannerKind);
-          }
-          if (typeof parsed.bannerFocus === "number") setBannerFocus(parsed.bannerFocus);
-          if (parsed.bannerCrop && typeof parsed.bannerCrop.x === "number") setBannerCrop(parsed.bannerCrop);
-          if (parsed.border && ["none", "legend", "mythic", "apex"].includes(parsed.border)) {
-            setSelectedBorder(parsed.border);
-          }
-          if (Array.isArray(parsed.tags)) {
-            setTags(parsed.tags.filter((item): item is string => typeof item === "string"));
-          }
+      const { data } = await supabase.auth.getSession();
+      const user = data.session?.user;
+      if (!user) {
+        if (!cancelled) {
+          setAccessState("guest");
+          setLoaded(true);
+        }
+        return;
+      }
 
-          if (typeof parsed.bannerSrc === "string") {
-            if (
-              parsed.bannerKind === "video" &&
-              parsed.bannerSrc === getProfileBannerVideoKey()
-            ) {
-              const blob = await loadProfileBannerVideo();
-              if (!cancelled) {
-                setBannerSrc(getProfileBannerVideoKey());
-                if (blob) {
-                  const objectUrl = URL.createObjectURL(blob);
-                  setBannerPreviewUrl(objectUrl);
-                }
-              }
-            } else if (parsed.bannerKind === "video" && parsed.bannerSrc.startsWith("data:video/")) {
-              const blob = await fetch(parsed.bannerSrc).then((response) => response.blob());
-              if (!cancelled) {
-                await saveProfileBannerVideo(blob);
-                const objectUrl = URL.createObjectURL(blob);
-                setBannerPreviewUrl(objectUrl);
-                setBannerSrc(getProfileBannerVideoKey());
-              }
-            } else {
-              setBannerSrc(parsed.bannerSrc);
-              setBannerPreviewUrl(null);
+      setDbaUserKey(user.id);
+
+      const remote = await loadSupabaseProfileSnapshot();
+      if (!remote) {
+        const fallbackDisplayName = (user.user_metadata?.display_name as string | undefined)?.trim() || "Member";
+        const fallbackUsername = (user.user_metadata?.username as string | undefined)?.replace(/^@/, "").trim() || "member";
+
+        const seededProfile = {
+          displayName: fallbackDisplayName,
+          username: fallbackUsername,
+          bio: "",
+          avatarSrc: "",
+          bannerSrc: "",
+          bannerKind: "image" as const,
+          bannerFocus: 50,
+          bannerCrop: null,
+          border: "none" as const,
+          tags: [] as string[],
+          rankKey: "Recruit" as const,
+          rankedPoints: 0,
+          highestRank: "Recruit",
+          totalMatch: 0,
+          winRate: 0,
+        };
+
+        await saveSupabaseProfileSnapshot(seededProfile);
+
+        if (!cancelled) {
+          setDisplayName(seededProfile.displayName);
+          setUsername(seededProfile.username);
+          setBio(seededProfile.bio);
+          setAvatarSrc(seededProfile.avatarSrc);
+          setBannerSrc(seededProfile.bannerSrc);
+          setBannerKind(seededProfile.bannerKind);
+          setBannerFocus(seededProfile.bannerFocus);
+          setBannerCrop(seededProfile.bannerCrop);
+          setSelectedBorder(seededProfile.border);
+          setTags(seededProfile.tags);
+          setRankKey(seededProfile.rankKey);
+          setRankedPoints(seededProfile.rankedPoints);
+          setHighestRank(seededProfile.highestRank);
+          setTotalMatch(seededProfile.totalMatch);
+          setWinRate(seededProfile.winRate);
+          setAccessState("ready");
+          fallbackFrame = window.requestAnimationFrame(() => setLoaded(true));
+        }
+        return;
+      }
+
+      if (cancelled) return;
+
+      if (typeof remote.displayName === "string") setDisplayName(remote.displayName);
+      if (typeof remote.username === "string") setUsername(remote.username);
+      if (typeof remote.bio === "string") setBio(remote.bio);
+      if (typeof remote.avatarSrc === "string") setAvatarSrc(remote.avatarSrc);
+      if (typeof remote.rankKey === "string") setRankKey(remote.rankKey as RankKey);
+      if (typeof remote.rankedPoints === "number") setRankedPoints(remote.rankedPoints);
+      if (typeof remote.highestRank === "string") setHighestRank(remote.highestRank);
+      if (typeof remote.totalMatch === "number") setTotalMatch(remote.totalMatch);
+      if (typeof remote.winRate === "number") setWinRate(remote.winRate);
+      if (typeof remote.bannerKind === "string" && (remote.bannerKind === "video" || remote.bannerKind === "image")) {
+        setBannerKind(remote.bannerKind);
+      }
+      if (typeof remote.bannerFocus === "number") setBannerFocus(remote.bannerFocus);
+      if (remote.bannerCrop && typeof remote.bannerCrop.x === "number") setBannerCrop(remote.bannerCrop);
+      if (remote.border && ["none", "legend", "mythic", "apex"].includes(remote.border)) {
+        setSelectedBorder(remote.border);
+      }
+      if (Array.isArray(remote.tags)) {
+        setTags(remote.tags.filter((item): item is string => typeof item === "string"));
+      }
+
+      if (typeof remote.bannerSrc === "string" && remote.bannerSrc.length > 0) {
+        if (remote.bannerKind === "video" && remote.bannerSrc === getProfileBannerVideoKey()) {
+          const blob = await loadProfileBannerVideo();
+          if (!cancelled) {
+            setBannerSrc(getProfileBannerVideoKey());
+            if (blob) {
+              const objectUrl = URL.createObjectURL(blob);
+              setBannerPreviewUrl(objectUrl);
             }
           }
+        } else if (remote.bannerKind === "video" && remote.bannerSrc.startsWith("data:video/")) {
+          const blob = await fetch(remote.bannerSrc).then((response) => response.blob());
+          if (!cancelled) {
+            await saveProfileBannerVideo(blob);
+            const objectUrl = URL.createObjectURL(blob);
+            setBannerPreviewUrl(objectUrl);
+            setBannerSrc(getProfileBannerVideoKey());
+          }
+        } else {
+          setBannerSrc(remote.bannerSrc);
+          setBannerPreviewUrl(null);
         }
-      } catch {
-        // ignore malformed draft
+      } else {
+        setBannerSrc("");
+        setBannerPreviewUrl(null);
+      }
+
+      const matches = await loadSupabaseRankedMatches();
+      if (!cancelled) {
+        setRecentMatches(
+          matches.map((match) => ({
+            opponent: match.opponent,
+            platform: match.platform,
+            result: match.result,
+            delta: `${match.delta >= 0 ? "+" : ""}${match.delta}`,
+            fromRank: match.fromRank,
+            toRank: match.toRank,
+            date: match.date,
+            image: match.image || "/images/1.jpg",
+          })),
+        );
       }
 
       if (!cancelled) {
         fallbackFrame = window.requestAnimationFrame(() => setLoaded(true));
+        setAccessState("ready");
       }
     };
 
@@ -1036,29 +1069,32 @@ export default function ProfilePage() {
       cancelled = true;
       window.cancelAnimationFrame(fallbackFrame);
     };
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (!loaded) return;
     try {
-      window.localStorage.setItem(
-        STORAGE_KEY,
-        JSON.stringify({
-          displayName,
-          username,
-          bio,
-          avatarSrc,
-          bannerSrc,
-          bannerKind,
-          bannerFocus,
-          border: selectedBorder,
-          tags,
-        } satisfies SavedProfile),
-      );
-    } catch {
-      // ignore storage quota issues so profile edits don't break
-    }
-  }, [avatarSrc, bannerFocus, bannerKind, bannerSrc, bio, displayName, loaded, selectedBorder, tags, username]);
+      void saveSupabaseProfileSnapshot({ 
+        displayName, 
+        username, 
+        bio, 
+        avatarSrc, 
+        bannerSrc, 
+        bannerKind, 
+        bannerFocus, 
+        bannerCrop, 
+        border: selectedBorder, 
+        tags,
+        rankKey,
+        rankedPoints,
+        highestRank,
+        totalMatch,
+        winRate,
+      }); 
+    } catch { 
+      // ignore storage quota issues so profile edits don't break 
+    } 
+  }, [avatarSrc, bannerCrop, bannerFocus, bannerKind, bannerSrc, bio, displayName, highestRank, loaded, rankKey, rankedPoints, selectedBorder, tags, totalMatch, username, winRate]); 
 
   useEffect(() => {
     return () => {
@@ -1067,6 +1103,91 @@ export default function ProfilePage() {
       }
     };
   }, [bannerPreviewUrl]);
+
+  if (!loaded) {
+    return (
+      <div className="min-h-screen bg-[#f8f8f6] text-black">
+        <Navbar />
+        <main className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-7xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
+          <p className="text-sm font-medium text-black/55">Menyiapkan profile dari Supabase...</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (accessState === "guest") {
+    return (
+      <div className="min-h-screen bg-[#f8f8f6] text-black">
+        <Navbar />
+        <main className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-7xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
+          <div className="w-full max-w-lg border-y border-black/10 bg-white px-5 py-8 text-left sm:px-6">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.42em] text-black/35">
+              Account required
+            </p>
+            <h1 className="mt-3 font-display text-4xl uppercase tracking-[0.06em] text-black sm:text-5xl">
+              Anda belum memiliki akun
+            </h1>
+            <p className="mt-3 max-w-md text-sm leading-6 text-black/60">
+              Buat akun dulu atau masuk ke akun yang sudah ada supaya profile, token, friends, dan history bisa
+              tersambung ke Supabase.
+            </p>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/login?mode=register"
+                className="inline-flex h-11 items-center justify-center border border-black/10 bg-black px-4 text-sm font-semibold text-white transition hover:opacity-90"
+              >
+                Buat akun
+              </Link>
+              <Link
+                href="/login"
+                className="inline-flex h-11 items-center justify-center border border-black/10 bg-white px-4 text-sm font-semibold text-black transition hover:bg-black/5"
+              >
+                Masuk
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
+
+  if (accessState === "onboarding") {
+    return (
+      <div className="min-h-screen bg-[#f8f8f6] text-black">
+        <Navbar />
+        <main className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-7xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
+          <div className="w-full max-w-lg border-y border-black/10 bg-white px-5 py-8 text-left sm:px-6">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.42em] text-black/35">
+              Onboarding needed
+            </p>
+            <h1 className="mt-3 font-display text-4xl uppercase tracking-[0.06em] text-black sm:text-5xl">
+              Profile belum siap
+            </h1>
+            <p className="mt-3 max-w-md text-sm leading-6 text-black/60">
+              Akun sudah masuk, tapi preference profile belum lengkap. Lanjutkan onboarding supaya data akun
+              tersimpan penuh di database.
+            </p>
+
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Link
+                href="/onboarding"
+                className="inline-flex h-11 items-center justify-center border border-black/10 bg-black px-4 text-sm font-semibold text-white transition hover:opacity-90"
+              >
+                Lanjut onboarding
+              </Link>
+              <Link
+                href="/login"
+                className="inline-flex h-11 items-center justify-center border border-black/10 bg-white px-4 text-sm font-semibold text-black transition hover:bg-black/5"
+              >
+                Kembali ke login
+              </Link>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8f8f6] text-black">
@@ -1389,46 +1510,68 @@ export default function ProfilePage() {
             </span>
           </div>
 
-          <div className="mt-5 grid gap-4 xl:grid-cols-3">
-            {matchEntries.map((match) => (
-              <article key={`${match.opponent}-${match.date}`} className="overflow-hidden rounded-[26px] border border-black/8 bg-black/[0.02]">
-                <div className="relative aspect-[4/3] bg-black/5">
-                  <Image
-                    src={match.image}
-                    alt={`${match.opponent} match preview`}
-                    fill
-                    sizes="(max-width: 1280px) 100vw, 33vw"
-                    className="object-cover grayscale contrast-110"
-                  />
-                </div>
-                <div className="space-y-3 p-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-semibold text-black">{match.opponent}</p>
-                      <p className="mt-1 text-xs text-black/45">
-                        {match.platform} - {match.date}
-                      </p>
-                    </div>
-                    <span className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] ${match.result === "Win" ? "bg-black text-white" : "bg-black/10 text-black/60"}`}>
-                      {match.result}
-                    </span>
+          {recentMatches.length > 0 ? (
+            <div className="mt-5 grid gap-4 xl:grid-cols-3">
+              {recentMatches.map((match) => (
+                <article key={`${match.opponent}-${match.date}`} className="overflow-hidden border border-black/8 bg-black/[0.02]">
+                  <div className="relative aspect-[4/3] bg-black/5">
+                    <Image
+                      src={match.image}
+                      alt={`${match.opponent} match preview`}
+                      fill
+                      sizes="(max-width: 1280px) 100vw, 33vw"
+                      className="object-cover grayscale contrast-110"
+                    />
                   </div>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-2xl border border-black/8 bg-white p-3">
-                      <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">Progress</p>
-                      <p className="mt-2 text-sm font-semibold text-black">
-                        {match.fromRank} → {match.toRank}
-                      </p>
+                  <div className="space-y-3 border-t border-black/8 p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-black">{match.opponent}</p>
+                        <p className="mt-1 text-xs text-black/45">
+                          {match.platform} - {match.date}
+                        </p>
+                      </div>
+                      <span
+                        className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] ${
+                          match.result === "Win" ? "bg-black text-white" : "bg-black/10 text-black/60"
+                        }`}
+                      >
+                        {match.result}
+                      </span>
                     </div>
-                    <div className="rounded-2xl border border-black/8 bg-white p-3">
-                      <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">Points change</p>
-                      <p className="mt-2 text-sm font-semibold text-black">{match.delta}</p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="border border-black/8 bg-white p-3">
+                        <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">Progress</p>
+                        <p className="mt-2 text-sm font-semibold text-black">
+                          {match.fromRank} → {match.toRank}
+                        </p>
+                      </div>
+                      <div className="border border-black/8 bg-white p-3">
+                        <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">Points change</p>
+                        <p className="mt-2 text-sm font-semibold text-black">{match.delta}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </article>
-            ))}
-          </div>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-5 border-t border-black/8 pt-5">
+              <div className="border border-black/8 bg-black/[0.02] p-5">
+                <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">Recent match</p>
+                <p className="mt-2 text-lg font-semibold text-black">Belum ada log match tersimpan</p>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-black/60">
+                  Riwayat battle akan muncul di sini setelah sistem ranked / match history terhubung ke database.
+                </p>
+                <Link
+                  href="/ranked"
+                  className="mt-4 inline-flex h-11 items-center justify-center border border-black/10 bg-white px-4 text-sm font-semibold text-black transition hover:bg-black/[0.03]"
+                >
+                  Buka ranked ladder
+                </Link>
+              </div>
+            </div>
+          )}
         </section>
 
         {editorMode ? (
@@ -1493,3 +1636,4 @@ export default function ProfilePage() {
     </div>
   );
 }
+

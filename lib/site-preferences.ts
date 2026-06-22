@@ -39,6 +39,12 @@ const STORAGE_KEYS = {
 
 export const THEME_COOKIE = "dba-theme";
 
+export function hasStoredSitePreferences() {
+  if (typeof window === "undefined") return false;
+
+  return Object.values(STORAGE_KEYS).some((key) => window.localStorage.getItem(key) !== null);
+}
+
 function readBoolean(key: string, fallback: boolean) {
   if (typeof window === "undefined") return fallback;
 

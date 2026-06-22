@@ -8,8 +8,12 @@ import {
   useState,
 } from "react";
 
-import { initialPosts } from "@/data/posts";
-import type { Post } from "@/types/post";
+import { initialPosts } from "@/data/posts"; 
+import { 
+  loadSupabasePosts, 
+  saveSupabasePosts, 
+} from "@/lib/supabase-store"; 
+import type { Post } from "@/types/post"; 
 
 type NewPost = Omit<Post, "id">;
 
@@ -54,13 +58,43 @@ export function PostStoreProvider({ children }: { children: ReactNode }) {
     }
   });
 
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(posts));
-  }, [posts]);
+  useEffect(() => { 
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(posts)); 
+  }, [posts]); 
 
-  function addPost(post: NewPost) {
-    setPosts((current) => [
-      {
+  useEffect(() => { 
+    let cancelled = false; 
+
+    void loadSupabasePosts(initialPosts).then((remotePosts) => { 
+      if (cancelled) return; 
+      if (remotePosts.length > 0) { 
+        setPosts((current) => { 
+          const customPosts = current.filter((post) => !initialPostIds.has(post.id)); 
+          const merged = [...customPosts, ...remotePosts]; 
+          const seen = new Set<string>(); 
+
+          return merged.filter((post) => { 
+            if (seen.has(post.id)) return false; 
+            seen.add(post.id); 
+            return true; 
+          }); 
+        }); 
+      } 
+    }); 
+
+    return () => { 
+      cancelled = true; 
+    }; 
+  }, []); 
+
+  useEffect(() => { 
+    const customPosts = posts.filter((post) => !initialPostIds.has(post.id)); 
+    void saveSupabasePosts(customPosts); 
+  }, [posts]); 
+
+  function addPost(post: NewPost) { 
+    setPosts((current) => [ 
+      { 
         id: `post-${Date.now()}`,
         ...post,
       },

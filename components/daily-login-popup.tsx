@@ -1,12 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+
+import { getSupabaseAuthClient } from "@/lib/supabase-auth";
+import { DBA_TOKEN_KEYS, formatTokenNumber, readTokenWallet, writeTokenWallet } from "@/lib/dba-token";
 import {
-  DBA_TOKEN_KEYS,
-  formatTokenNumber,
-  readTokenWallet,
-  writeTokenWallet,
-} from "@/lib/dba-token";
+  appendSupabaseTokenTransaction,
+  loadSupabaseTokenWallet,
+  recordSupabaseDailyLoginClaim,
+  saveSupabaseTokenWallet,
+} from "@/lib/supabase-store";
 
 type RewardItem = {
   day: number;
@@ -26,10 +29,6 @@ const REWARDS: RewardItem[] = [
   { day: 6, label: "120 DBA Token", detail: "Hampir menuju reward puncak.", type: "token", amount: 120 },
   { day: 7, label: "Elite Tag", detail: "Tag premium lebih bagus dari hari ke-4.", type: "tag", tag: "DBA Elite Tag" },
 ];
-
-// ---------------------------------------------------------------------------
-// Date helpers (WIB / Asia-Jakarta)
-// ---------------------------------------------------------------------------
 
 function getWibDateKey(date = new Date()): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -51,14 +50,6 @@ function clampDay(value: number): number {
   return Math.max(0, Math.min(7, Math.trunc(value)));
 }
 
-// ---------------------------------------------------------------------------
-// localStorage helpers — single source of truth for claim persistence
-// ---------------------------------------------------------------------------
-
-/**
- * Read the saved claim state from localStorage.
- * Returns null if the user has not claimed today or their streak is broken.
- */
 function readClaimState(): { claimDate: string; streakDay: number } | null {
   if (typeof window === "undefined") return null;
 
@@ -71,117 +62,152 @@ function readClaimState(): { claimDate: string; streakDay: number } | null {
   const today = getWibDateKey();
   const yesterday = getWibYesterdayKey();
 
-  // Valid only if the last claim was today or yesterday (streak alive)
   if (storedDate === today || storedDate === yesterday) {
     return { claimDate: storedDate, streakDay: storedDay };
   }
 
-  // Streak broken — reset
   return null;
 }
 
-/**
- * Persist the completed claim to localStorage immediately.
- * This is the ONLY place where DBA_TOKEN_KEYS.claimDate is written after a claim.
- */
 function persistClaimState(claimDate: string, streakDay: number): void {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(DBA_TOKEN_KEYS.claimDate, claimDate);
   window.localStorage.setItem(DBA_TOKEN_KEYS.streakDay, String(streakDay));
 }
 
-/**
- * Clear a broken streak from localStorage.
- */
 function clearBrokenStreak(): void {
   if (typeof window === "undefined") return;
   window.localStorage.removeItem(DBA_TOKEN_KEYS.claimDate);
   window.localStorage.setItem(DBA_TOKEN_KEYS.streakDay, "0");
 }
 
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
 export default function DailyLoginPopup() {
   const [isOpen, setIsOpen] = useState(false);
+  const [authReady, setAuthReady] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [balance, setBalance] = useState(() => readTokenWallet().balance);
+  const [claimState, setClaimState] = useState<{ claimDate: string; streakDay: number } | null>(() => readClaimState());
 
-  // Derive initial claim state synchronously from localStorage on first mount.
-  const [claimState, setClaimState] = useState<{ claimDate: string; streakDay: number } | null>(
-    () => readClaimState()
-  );
-
-  // Stable "today" key — computed once per mount. 
-  // If the day rolls over while the popup is open the user would need to reload anyway.
   const todayKey = useMemo(() => getWibDateKey(), []);
 
   const hasClaimedToday = claimState?.claimDate === todayKey;
   const lastClaimDay = claimState?.streakDay ?? 0;
 
-  // Which day will be claimed on the next click?
   const activeDay: number = hasClaimedToday
-    ? lastClaimDay || 1                          // already claimed — show current day
-    : lastClaimDay === 0                         // never claimed / broken streak
+    ? lastClaimDay || 1
+    : lastClaimDay === 0
       ? 1
       : lastClaimDay >= 7
-        ? 1                                      // restart after day 7
+        ? 1
         : lastClaimDay + 1;
 
   const currentReward = REWARDS[activeDay - 1];
 
-  // ------------------------------------------------------------------
-  // Auto-open: show popup ~1.2 s after page load IF user hasn't claimed today.
-  // ------------------------------------------------------------------
   useEffect(() => {
-    if (hasClaimedToday) return; // already claimed — never auto-open
+    const supabase = getSupabaseAuthClient();
+    let cancelled = false;
+
+    const applyGuestState = () => {
+      if (cancelled) return;
+      setIsAuthenticated(false);
+      setAuthReady(true);
+      setBalance(readTokenWallet().balance);
+      setClaimState(readClaimState());
+    };
+
+    const applyAuthenticatedState = async () => {
+      const remoteWallet = await loadSupabaseTokenWallet();
+      if (cancelled) return;
+
+      setIsAuthenticated(true);
+      setAuthReady(true);
+
+      if (remoteWallet) {
+        setBalance(remoteWallet.balance);
+        if (remoteWallet.claimDate && remoteWallet.streakDay) {
+          setClaimState({
+            claimDate: remoteWallet.claimDate,
+            streakDay: remoteWallet.streakDay,
+          });
+          return;
+        }
+      }
+
+      setBalance(0);
+      setClaimState(null);
+    };
+
+    if (!supabase) {
+      applyGuestState();
+      return;
+    }
+
+    void supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      if (data.session?.user) {
+        void applyAuthenticatedState();
+        return;
+      }
+
+      applyGuestState();
+    });
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (cancelled) return;
+      if (session?.user) {
+        void applyAuthenticatedState();
+        return;
+      }
+
+      applyGuestState();
+    });
+
+    return () => {
+      cancelled = true;
+      data.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!authReady || !isAuthenticated || hasClaimedToday) return;
+
     const timer = window.setTimeout(() => setIsOpen(true), 1200);
     return () => window.clearTimeout(timer);
-    // Only run once on mount. todayKey and hasClaimedToday are stable for this session.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authReady, hasClaimedToday, isAuthenticated]);
 
-  // ------------------------------------------------------------------
-  // Listen for manual "open-daily-login" custom event (e.g. from navbar button).
-  // ------------------------------------------------------------------
-  useEffect(() => {
-    const handler = () => setIsOpen(true);
-    window.addEventListener("open-daily-login", handler);
-    return () => window.removeEventListener("open-daily-login", handler);
-  }, []);
-
-  // ------------------------------------------------------------------
-  // Body scroll lock while popup is open.
-  // ------------------------------------------------------------------
   useEffect(() => {
     if (!isOpen) {
       document.body.style.overflow = "";
       return;
     }
+
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+    return () => {
+      document.body.style.overflow = prev;
+    };
   }, [isOpen]);
 
-  // ------------------------------------------------------------------
-  // Broken-streak cleanup: if localStorage has a stale date from > yesterday,
-  // wipe it so it doesn't interfere with the next claim cycle.
-  // ------------------------------------------------------------------
   useEffect(() => {
     const saved = readClaimState();
     if (!saved && window.localStorage.getItem(DBA_TOKEN_KEYS.claimDate)) {
-      // There was a stored date but it's too old — clean up.
       clearBrokenStreak();
     }
-  // Run once on mount only.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    const handler = () => {
+      if (isAuthenticated) {
+        setIsOpen(true);
+      }
+    };
 
-  // ------------------------------------------------------------------
-  // Claim handler
-  // ------------------------------------------------------------------
+    window.addEventListener("open-daily-login", handler);
+    return () => window.removeEventListener("open-daily-login", handler);
+  }, [isAuthenticated]);
+
+  if (!authReady || !isAuthenticated || !isOpen) return null;
+
   const handleClaim = () => {
     if (hasClaimedToday) return;
 
@@ -192,18 +218,37 @@ export default function DailyLoginPopup() {
         ? Array.from(new Set([...wallet.unlocks, currentReward.tag]))
         : wallet.unlocks;
 
-    // 1. Write token wallet (balance, unlocks, history).
     writeTokenWallet({
       balance: nextBalance,
       unlocks: nextUnlocks,
       history: wallet.history,
+      claimDate: todayKey,
+      streakDay: activeDay,
+    });
+    void saveSupabaseTokenWallet({
+      balance: nextBalance,
+      unlocks: nextUnlocks,
+      history: wallet.history,
+      claimDate: todayKey,
+      streakDay: activeDay,
+    });
+    void recordSupabaseDailyLoginClaim({
+      claimDate: todayKey,
+      streakDay: activeDay,
+      rewardDay: currentReward.day,
+      rewardType: currentReward.type,
+      rewardAmount: currentReward.amount,
+      rewardTag: currentReward.tag,
+    });
+    void appendSupabaseTokenTransaction({
+      title: currentReward.label,
+      cost: 0,
+      kind: "claim",
+      balanceAfter: nextBalance,
     });
 
-    // 2. CRITICAL: persist claim date & streak to localStorage IMMEDIATELY
-    //    so that refreshes / navigations cannot trigger another claim.
     persistClaimState(todayKey, activeDay);
 
-    // 3. Update React state so UI reflects the claim without a reload.
     setBalance(nextBalance);
     setClaimState({ claimDate: todayKey, streakDay: activeDay });
   };
@@ -248,9 +293,7 @@ export default function DailyLoginPopup() {
           <div className="rounded-[24px] border border-black/10 bg-white px-3 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.8)] sm:px-4">
             <div className="flex items-center justify-center gap-3 text-center text-black">
               <span className="h-px w-10 bg-black/20" />
-              <p className="font-sans text-lg font-black uppercase tracking-[0.08em] sm:text-xl">
-                Reward Track
-              </p>
+              <p className="font-sans text-lg font-black uppercase tracking-[0.08em] sm:text-xl">Reward Track</p>
               <span className="h-px w-10 bg-black/20" />
             </div>
 
@@ -278,12 +321,20 @@ export default function DailyLoginPopup() {
                         } ${isLocked ? "opacity-70" : ""}`}
                       >
                         <div className="flex h-16 w-16 items-center justify-center rounded-[16px] border border-black/10 bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(240,240,240,0.82))]">
-                          <div className={`rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${isActive ? "bg-white text-black" : "bg-black text-white"}`}>
+                          <div
+                            className={`rounded-full px-2 py-1 text-[10px] font-black uppercase tracking-[0.18em] ${
+                              isActive ? "bg-white text-black" : "bg-black text-white"
+                            }`}
+                          >
                             {reward.day}
                           </div>
                         </div>
 
-                        <p className={`mt-2 text-center font-sans text-[12px] font-black uppercase tracking-[0.08em] ${isActive ? "text-white" : "text-black"}`}>
+                        <p
+                          className={`mt-2 text-center font-sans text-[12px] font-black uppercase tracking-[0.08em] ${
+                            isActive ? "text-white" : "text-black"
+                          }`}
+                        >
                           {reward.label}
                         </p>
                         <p className={`mt-1 text-center text-[11px] leading-4 ${isActive ? "text-white/75" : "text-black/58"}`}>

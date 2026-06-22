@@ -4,15 +4,13 @@ import { useEffect, useState } from "react";
 import { WifiOff, RotateCw, AlertTriangle, ArrowLeft } from "lucide-react";
 import Link from "next/link";
 
-export default function OfflinePage() {
-  const [isOnline, setIsOnline] = useState(false);
-  const [isRetrying, setIsRetrying] = useState(false);
+export default function OfflinePage() { 
+  const [isOnline, setIsOnline] = useState(() => (typeof navigator !== "undefined" ? navigator.onLine : false)); 
+  const [isRetrying, setIsRetrying] = useState(false); 
 
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+  useEffect(() => { 
+    const handleOnline = () => setIsOnline(true); 
+    const handleOffline = () => setIsOnline(false); 
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);

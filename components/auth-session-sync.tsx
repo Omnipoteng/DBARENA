@@ -1,0 +1,57 @@
+"use client";
+
+import { useEffect } from "react";
+
+import { clearDbaUserKey, getDbaUserKey, setDbaUserKey } from "@/lib/dba-user";
+import { clearTokenWallet, writeTokenWallet } from "@/lib/dba-token";
+import { getSupabaseAuthClient } from "@/lib/supabase-auth";
+import { loadSupabaseTokenWallet } from "@/lib/supabase-store";
+
+export default function AuthSessionSync() {
+  useEffect(() => {
+    const supabase = getSupabaseAuthClient();
+    if (!supabase) return;
+
+    let mounted = true;
+
+    void supabase.auth.getSession().then(({ data }) => {
+      if (!mounted) return;
+
+      const user = data.session?.user;
+      if (user) {
+        setDbaUserKey(user.id);
+        void loadSupabaseTokenWallet().then((remoteWallet) => {
+          if (!mounted || !remoteWallet) return;
+          writeTokenWallet(remoteWallet);
+        });
+        return;
+      }
+
+      clearDbaUserKey();
+      clearTokenWallet();
+      getDbaUserKey();
+    });
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setDbaUserKey(session.user.id);
+        void loadSupabaseTokenWallet().then((remoteWallet) => {
+          if (!remoteWallet) return;
+          writeTokenWallet(remoteWallet);
+        });
+        return;
+      }
+
+      clearDbaUserKey();
+      clearTokenWallet();
+      getDbaUserKey();
+    });
+
+    return () => {
+      mounted = false;
+      data.subscription.unsubscribe();
+    };
+  }, []);
+
+  return null;
+}

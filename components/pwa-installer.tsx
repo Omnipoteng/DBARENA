@@ -3,14 +3,18 @@
 import { useEffect, useState } from "react";
 import { Download, X, Smartphone, Check } from "lucide-react";
 
-interface BeforeInstallPromptEvent extends Event {
-  readonly platforms: string[];
-  readonly userChoice: Promise<{
-    outcome: "accepted" | "dismissed";
-    platform: string;
-  }>;
-  prompt(): Promise<void>;
-}
+interface BeforeInstallPromptEvent extends Event { 
+  readonly platforms: string[]; 
+  readonly userChoice: Promise<{ 
+    outcome: "accepted" | "dismissed"; 
+    platform: string; 
+  }>; 
+  prompt(): Promise<void>; 
+} 
+
+interface NavigatorWithStandalone extends Navigator { 
+  standalone?: boolean; 
+} 
 
 export default function PwaInstaller() {
   const [installPrompt, setInstallPrompt] = useState<BeforeInstallPromptEvent | null>(null);
@@ -33,14 +37,14 @@ export default function PwaInstaller() {
       });
     }
 
-    // 2. Mendeteksi status standalone (sudah terinstall & dibuka sebagai aplikasi)
-    const checkStandalone = () => {
-      const isStandaloneMedia = window.matchMedia("(display-mode: standalone)").matches;
-      const isNavigatorStandalone = (navigator as any).standalone === true;
-      if (isStandaloneMedia || isNavigatorStandalone) {
-        setIsInstalled(true);
-      }
-    };
+    // 2. Mendeteksi status standalone (sudah terinstall & dibuka sebagai aplikasi) 
+    const checkStandalone = () => { 
+      const isStandaloneMedia = window.matchMedia("(display-mode: standalone)").matches; 
+      const isNavigatorStandalone = (navigator as NavigatorWithStandalone).standalone === true; 
+      if (isStandaloneMedia || isNavigatorStandalone) { 
+        setIsInstalled(true); 
+      } 
+    }; 
     checkStandalone();
 
     // 3. Menangani event beforeinstallprompt

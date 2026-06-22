@@ -1,4 +1,6 @@
 import Link from "next/link";
+import BlurText from "../blur-text";
+import TextType from "../text-type";
 
 export default function HeroSection() { 
   return ( 
@@ -13,12 +15,26 @@ export default function HeroSection() {
           <p className="mb-2 text-xs font-semibold uppercase text-black/45"> 
             Debater Battle Arena 
           </p> 
-          <h1 className="font-display text-4xl leading-[0.9] text-black sm:text-7xl lg:text-8xl"> 
-            WELCOME TO DBARENA 
-          </h1> 
-          <p className="mt-2 max-w-2xl text-base leading-5 text-black/68 sm:text-lg"> 
-            adalah penyelenggara event death battle terbesar di indonesia, kalian bisa memulai perjalanan kalian disini, silahkan bersenang senang 
-          </p> 
+          <BlurText 
+            text="WELCOME TO DBARENA" 
+            delay={150} 
+            animateBy="words" 
+            direction="bottom"
+            className="font-display text-[8.5vw] font-bold leading-[0.9] text-[#1a1a1a] sm:text-7xl lg:text-8xl"
+          />
+          <TextType
+            as="p"
+            className="mt-2 max-w-2xl text-base leading-5 text-black/68 sm:text-lg min-h-[3rem]"
+            text={[
+              "adalah penyelenggara event death battle terbesar di indonesia, kalian bisa memulai perjalanan kalian disini, silahkan bersenang senang",
+              "buktikan kemampuan logikamu dan raih gelar debater terkuat di DBARENA",
+              "tempat berkumpulnya para debater elit dari seluruh penjuru Nusantara"
+            ]}
+            typingSpeed={30}
+            deletingSpeed={15}
+            pauseDuration={2500}
+            loop={true}
+          />
         </div> 
 
         <div className="mt-7 w-full max-w-4xl overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">  

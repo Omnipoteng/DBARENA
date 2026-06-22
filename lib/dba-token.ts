@@ -25,11 +25,13 @@ export type TokenHistoryEntry = {
   timestamp: string;
 };
 
-export type TokenWalletSnapshot = {
-  balance: number;
-  unlocks: string[];
-  history: TokenHistoryEntry[];
-};
+export type TokenWalletSnapshot = { 
+  balance: number; 
+  unlocks: string[]; 
+  history: TokenHistoryEntry[]; 
+  claimDate?: string; 
+  streakDay?: number; 
+}; 
 
 export const TOKEN_SHOP_ITEMS: TokenShopItem[] = [
   {
@@ -111,9 +113,11 @@ export function readTokenWallet(): TokenWalletSnapshot {
     return { balance: 0, unlocks: [], history: [] };
   }
 
-  const rawBalance = window.localStorage.getItem(DBA_TOKEN_KEYS.balance) ?? "0";
-  const rawUnlocks = window.localStorage.getItem(DBA_TOKEN_KEYS.unlocks) ?? "[]";
-  const rawHistory = window.localStorage.getItem(DBA_TOKEN_KEYS.history) ?? "[]";
+  const rawBalance = window.localStorage.getItem(DBA_TOKEN_KEYS.balance) ?? "0"; 
+  const rawUnlocks = window.localStorage.getItem(DBA_TOKEN_KEYS.unlocks) ?? "[]"; 
+  const rawHistory = window.localStorage.getItem(DBA_TOKEN_KEYS.history) ?? "[]"; 
+  const rawClaimDate = window.localStorage.getItem(DBA_TOKEN_KEYS.claimDate) ?? ""; 
+  const rawStreakDay = Number(window.localStorage.getItem(DBA_TOKEN_KEYS.streakDay) ?? "0"); 
 
   const balance = Number(rawBalance);
 
@@ -144,19 +148,38 @@ export function readTokenWallet(): TokenWalletSnapshot {
     history = [];
   }
 
-  return {
-    balance: Number.isFinite(balance) ? balance : 0,
-    unlocks,
-    history,
-  };
-}
+  return { 
+    balance: Number.isFinite(balance) ? balance : 0, 
+    unlocks, 
+    history, 
+    claimDate: rawClaimDate || undefined, 
+    streakDay: Number.isFinite(rawStreakDay) ? rawStreakDay : undefined, 
+  }; 
+} 
 
-export function writeTokenWallet(nextWallet: TokenWalletSnapshot) {
+export function writeTokenWallet(nextWallet: TokenWalletSnapshot) { 
+  if (typeof window === "undefined") return; 
+
+  window.localStorage.setItem(DBA_TOKEN_KEYS.balance, String(nextWallet.balance)); 
+  window.localStorage.setItem(DBA_TOKEN_KEYS.unlocks, JSON.stringify(nextWallet.unlocks)); 
+  window.localStorage.setItem(DBA_TOKEN_KEYS.history, JSON.stringify(nextWallet.history)); 
+  if (typeof nextWallet.claimDate === "string") { 
+    window.localStorage.setItem(DBA_TOKEN_KEYS.claimDate, nextWallet.claimDate); 
+  } 
+  if (typeof nextWallet.streakDay === "number") { 
+    window.localStorage.setItem(DBA_TOKEN_KEYS.streakDay, String(nextWallet.streakDay)); 
+  }
+  window.dispatchEvent(new Event("dba-token-wallet-updated")); 
+} 
+
+export function clearTokenWallet() {
   if (typeof window === "undefined") return;
 
-  window.localStorage.setItem(DBA_TOKEN_KEYS.balance, String(nextWallet.balance));
-  window.localStorage.setItem(DBA_TOKEN_KEYS.unlocks, JSON.stringify(nextWallet.unlocks));
-  window.localStorage.setItem(DBA_TOKEN_KEYS.history, JSON.stringify(nextWallet.history));
+  window.localStorage.removeItem(DBA_TOKEN_KEYS.balance);
+  window.localStorage.removeItem(DBA_TOKEN_KEYS.unlocks);
+  window.localStorage.removeItem(DBA_TOKEN_KEYS.history);
+  window.localStorage.removeItem(DBA_TOKEN_KEYS.claimDate);
+  window.localStorage.removeItem(DBA_TOKEN_KEYS.streakDay);
   window.dispatchEvent(new Event("dba-token-wallet-updated"));
 }
 

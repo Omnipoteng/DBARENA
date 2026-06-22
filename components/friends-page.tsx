@@ -1,9 +1,13 @@
 "use client";
 
-import Image from "next/image";
-import { useState } from "react";
+import Image from "next/image"; 
+import { useEffect, useState } from "react"; 
 
-import Navbar from "@/components/sections/navbar";
+import Navbar from "@/components/sections/navbar"; 
+import { 
+  loadSupabaseFriends, 
+  setSupabaseFollowState, 
+} from "@/lib/supabase-store"; 
 
 type SocialProfile = {
   id: string;
@@ -86,10 +90,25 @@ function getActionLabel(profile: SocialProfile) {
   return "Follow";
 }
 
-export default function FriendsPage() {
-  const [profiles, setProfiles] = useState(initialProfiles);
-  const [query, setQuery] = useState("");
-  const [view, setView] = useState<"all" | "friends" | "following" | "suggested">("all");
+export default function FriendsPage() { 
+  const [profiles, setProfiles] = useState(initialProfiles); 
+  const [query, setQuery] = useState(""); 
+  const [view, setView] = useState<"all" | "friends" | "following" | "suggested">("all"); 
+
+  useEffect(() => { 
+    let cancelled = false; 
+
+    void loadSupabaseFriends(initialProfiles).then((remoteProfiles) => { 
+      if (cancelled) return; 
+      if (remoteProfiles.length > 0) { 
+        setProfiles(remoteProfiles); 
+      } 
+    }); 
+
+    return () => { 
+      cancelled = true; 
+    }; 
+  }, []); 
 
   const filteredProfiles = profiles.filter((profile) => {
     const needle = query.trim().toLowerCase();
@@ -117,18 +136,25 @@ export default function FriendsPage() {
     return searchMatch && viewMatch;
   });
 
-  const toggleFollow = (id: string) => {
-    setProfiles((current) =>
-      current.map((profile) =>
-        profile.id === id
-          ? {
-              ...profile,
-              following: !profile.following,
-            }
-          : profile,
-      ),
-    );
-  };
+  const toggleFollow = (id: string) => { 
+    setProfiles((current) => { 
+      const nextProfiles = current.map((profile) => 
+        profile.id === id 
+          ? { 
+              ...profile, 
+              following: !profile.following, 
+            } 
+          : profile, 
+      ); 
+
+      const next = nextProfiles.find((profile) => profile.id === id); 
+      if (next) { 
+        void setSupabaseFollowState(id, next.following); 
+      } 
+
+      return nextProfiles; 
+    }); 
+  }; 
 
   return (
     <div className="min-h-screen bg-[#f4f4f2] text-black">
