@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { loadSupabaseAllUsers, updateSupabaseUserAccess, createSupabaseUser } from "@/lib/supabase-store";
 
 type DashboardCategoryKey =
   | "news_slider"
@@ -73,6 +74,8 @@ type DashboardUser = {
   lastActive: string;
   dateAdded: string;
   notes: string;
+  isMuted?: boolean;
+  isBanned?: boolean;
 };
 
 type NewUserForm = {
@@ -495,7 +498,9 @@ export default function DashboardPage() {
   );
   const [filePreviews, setFilePreviews] = useState<Record<string, string>>({});
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
-  const [users, setUsers] = useState<DashboardUser[]>(initialUsers);
+  const [users, setUsers] = useState<DashboardUser[]>(
+    initialUsers.map((u) => ({ ...u, isMuted: false, isBanned: false }))
+  );
   const [newUserForm, setNewUserForm] = useState<NewUserForm>({
     name: "",
     email: "",
@@ -506,6 +511,101 @@ export default function DashboardPage() {
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
   const [activeAdminSection, setActiveAdminSection] =
     useState<AdminSectionKey>("user-management");
+
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [manageUser, setManageUser] = useState<DashboardUser | null>(null);
+  const [manageForm, setManageForm] = useState<{
+    role: DashboardRoleKey;
+    status: "Active" | "Invited" | "Suspended";
+    isMuted: boolean;
+    isBanned: boolean;
+    notes: string;
+  }>({
+    role: "scaler",
+    status: "Active",
+    isMuted: false,
+    isBanned: false,
+    notes: "",
+  });
+
+  useEffect(() => {
+    async function fetchUsers() {
+      setLoadingUsers(true);
+      try {
+        const initialUsersWithMuteBan = initialUsers.map((u) => ({
+          ...u,
+          isMuted: false,
+          isBanned: false,
+        }));
+        const dbUsers = await loadSupabaseAllUsers(initialUsersWithMuteBan);
+        setUsers(dbUsers);
+      } catch (err) {
+        console.error("Failed to load users from DB, falling back to mock:", err);
+      } finally {
+        setLoadingUsers(false);
+      }
+    }
+    fetchUsers();
+  }, []);
+
+  const handleOpenManageModal = (user: DashboardUser) => {
+    setManageUser(user);
+    setManageForm({
+      role: user.role,
+      status: user.status,
+      isMuted: Boolean(user.isMuted),
+      isBanned: Boolean(user.isBanned),
+      notes: user.notes || "",
+    });
+  };
+
+  const handleManageUserSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!manageUser) return;
+
+    try {
+      await updateSupabaseUserAccess(manageUser.id, {
+        role: manageForm.role,
+        status: manageForm.status,
+        is_muted: manageForm.isMuted,
+        is_banned: manageForm.isBanned,
+        notes: manageForm.notes,
+      });
+
+      setUsers((current) =>
+        current.map((user) =>
+          user.id === manageUser.id
+            ? {
+                ...user,
+                role: manageForm.role,
+                status: manageForm.status,
+                isMuted: manageForm.isMuted,
+                isBanned: manageForm.isBanned,
+                notes: manageForm.notes,
+              }
+            : user
+        )
+      );
+    } catch (err) {
+      console.error("Failed to update user in database, updating locally anyway:", err);
+      setUsers((current) =>
+        current.map((user) =>
+          user.id === manageUser.id
+            ? {
+                ...user,
+                role: manageForm.role,
+                status: manageForm.status,
+                isMuted: manageForm.isMuted,
+                isBanned: manageForm.isBanned,
+                notes: manageForm.notes,
+              }
+            : user
+        )
+      );
+    }
+
+    setManageUser(null);
+  };
 
   const activeCategory = useMemo(
     () => categories.find((category) => category.key === selectedCategory),
@@ -577,23 +677,28 @@ export default function DashboardPage() {
   function handleNewUserSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    setUsers((current) => [
-      {
-        id: crypto.randomUUID(),
-        name: newUserForm.name,
-        email: newUserForm.email,
-        role: newUserForm.role,
-        status: "Invited",
-        lastActive: "Just now",
-        dateAdded: new Date().toLocaleDateString("en-US", {
-          month: "short",
-          day: "numeric",
-          year: "numeric",
-        }),
-        notes: newUserForm.notes,
-      },
-      ...current,
-    ]);
+    const newUser: DashboardUser = {
+      id: crypto.randomUUID(),
+      name: newUserForm.name,
+      email: newUserForm.email,
+      role: newUserForm.role,
+      status: "Invited",
+      lastActive: "Just now",
+      dateAdded: new Date().toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }),
+      notes: newUserForm.notes,
+      isMuted: false,
+      isBanned: false,
+    };
+
+    setUsers((current) => [newUser, ...current]);
+
+    createSupabaseUser(newUser).catch((err) =>
+      console.error("Failed to create user in database:", err)
+    );
 
     setNewUserForm({
       name: "",
@@ -1374,8 +1479,20 @@ export default function DashboardPage() {
                               .slice(0, 2)
                               .join("")}
                           </div>
-                          <div className="min-w-0">
-                            <p className="truncate text-sm font-semibold text-black">{user.name}</p>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-1.5">
+                              <p className="truncate text-sm font-semibold text-black">{user.name}</p>
+                              {user.isMuted && (
+                                <span className="rounded-md bg-neutral-100 border border-neutral-200 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-neutral-500 shrink-0">
+                                  Muted
+                                </span>
+                              )}
+                              {user.isBanned && (
+                                <span className="rounded-md bg-red-50 border border-red-200 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-red-600 shrink-0">
+                                  Banned
+                                </span>
+                              )}
+                            </div>
                             <p className="truncate text-xs text-black/50">{user.email}</p>
                           </div>
                         </div>
@@ -1401,6 +1518,7 @@ export default function DashboardPage() {
 
                         <button
                           type="button"
+                          onClick={() => handleOpenManageModal(user)}
                           className="flex items-center justify-center text-sm font-semibold tracking-[0.24em] text-black/45 transition hover:text-black"
                           aria-label={`More actions for ${user.name}`}
                         >
@@ -1667,6 +1785,156 @@ export default function DashboardPage() {
                     className="rounded-md bg-black px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
                   >
                     Save user
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        ) : null}
+
+        {manageUser ? (
+          <div
+            className="fixed inset-0 z-[90] flex items-center justify-center bg-black/45 px-4 py-8 backdrop-blur-sm"
+            onClick={() => setManageUser(null)}
+            role="dialog"
+            aria-modal="true"
+          >
+            <div
+              className="w-full max-w-lg rounded-[1.5rem] border border-black/10 bg-white p-6 shadow-2xl"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <div className="flex items-start justify-between gap-4 border-b border-black/8 pb-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-black/40">
+                    Manage Member
+                  </p>
+                  <h3 className="mt-2 text-xl font-semibold text-black">
+                    {manageUser.name}
+                  </h3>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setManageUser(null)}
+                  className="rounded-md border border-black/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-wider text-black/70 transition hover:bg-black/[0.03]"
+                >
+                  Close
+                </button>
+              </div>
+
+              <form onSubmit={handleManageUserSubmit} className="mt-5 grid gap-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="grid gap-1.5">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-black/60">Role</span>
+                    <select
+                      value={manageForm.role}
+                      onChange={(event) =>
+                        setManageForm((current) => ({
+                          ...current,
+                          role: event.target.value as DashboardRoleKey,
+                        }))
+                      }
+                      className="rounded-md border border-black/10 bg-white px-3 py-2.5 text-sm text-black outline-none focus:border-black/40 focus:ring-2 focus:ring-black/10"
+                    >
+                      {roleDefinitions.map((role) => (
+                        <option key={role.key} value={role.key}>
+                          {role.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="grid gap-1.5">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-black/60">Status</span>
+                    <select
+                      value={manageForm.status}
+                      onChange={(event) =>
+                        setManageForm((current) => ({
+                          ...current,
+                          status: event.target.value as any,
+                        }))
+                      }
+                      className="rounded-md border border-black/10 bg-white px-3 py-2.5 text-sm text-black outline-none focus:border-black/40 focus:ring-2 focus:ring-black/10"
+                    >
+                      <option value="Active">Active</option>
+                      <option value="Invited">Invited</option>
+                      <option value="Suspended">Suspended</option>
+                    </select>
+                  </label>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-black/60">Mute User</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setManageForm((current) => ({
+                          ...current,
+                          isMuted: !current.isMuted,
+                        }))
+                      }
+                      className={`h-11 rounded-md border text-sm font-semibold uppercase tracking-wider transition ${
+                        manageForm.isMuted
+                          ? "border-black bg-black text-white"
+                          : "border-black/10 bg-white text-black/70 hover:bg-black/[0.03]"
+                      }`}
+                    >
+                      {manageForm.isMuted ? "🔇 Muted" : "🔊 Active"}
+                    </button>
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-black/60">Ban User</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setManageForm((current) => ({
+                          ...current,
+                          isBanned: !current.isBanned,
+                          status: !current.isBanned ? "Suspended" : "Active",
+                        }))
+                      }
+                      className={`h-11 rounded-md border text-sm font-semibold uppercase tracking-wider transition ${
+                        manageForm.isBanned
+                          ? "border-red-600 bg-red-600 text-white hover:bg-red-700"
+                          : "border-black/10 bg-white text-black/70 hover:bg-black/[0.03]"
+                      }`}
+                    >
+                      {manageForm.isBanned ? "🚫 Banned" : "✅ Unbanned"}
+                    </button>
+                  </div>
+                </div>
+
+                <label className="grid gap-1.5">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-black/60">Admin Notes</span>
+                  <textarea
+                    value={manageForm.notes}
+                    onChange={(event) =>
+                      setManageForm((current) => ({
+                        ...current,
+                        notes: event.target.value,
+                      }))
+                    }
+                    placeholder="E.g., Muted for inappropriate language in debates."
+                    className="rounded-md border border-black/10 px-3 py-2 text-sm text-black outline-none placeholder:text-black/35 focus:border-black/40 focus:ring-2 focus:ring-black/10"
+                    rows={3}
+                  />
+                </label>
+
+                <div className="flex justify-end gap-2 border-t border-black/8 pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setManageUser(null)}
+                    className="rounded-md border border-black/10 px-4 py-2 text-sm text-black transition hover:bg-black/[0.03]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="rounded-md bg-black px-4 py-2 text-sm font-semibold uppercase tracking-wider text-white transition hover:bg-neutral-800"
+                  >
+                    Save Changes
                   </button>
                 </div>
               </form>

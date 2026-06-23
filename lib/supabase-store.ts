@@ -605,3 +605,167 @@ export async function saveSupabaseSitePreferences(preferences: SitePreferences) 
     { onConflict: "user_key" },
   );
 }
+
+export type SupabaseUserManagementRow = {
+  id: string;
+  name: string;
+  email: string;
+  role: "admin" | "editor" | "scaler" | "moderator";
+  status: "Active" | "Invited" | "Suspended";
+  isMuted: boolean;
+  isBanned: boolean;
+  lastActive: string;
+  dateAdded: string;
+  notes: string;
+};
+
+export async function loadSupabaseAllUsers(
+  fallbackUsers: SupabaseUserManagementRow[]
+): Promise<SupabaseUserManagementRow[]> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return fallbackUsers;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("user_key, display_name, email, role, status, is_muted, is_banned, notes, created_at, updated_at")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("Error loading users:", error);
+    return fallbackUsers;
+  }
+
+  if (!data || data.length === 0) {
+    try {
+      await supabase.from("profiles").upsert(
+        fallbackUsers.map((user) => ({
+          user_key: user.id,
+          display_name: user.name,
+          email: user.email,
+          role: user.role,
+          status: user.status,
+          is_muted: user.isMuted,
+          is_banned: user.isBanned,
+          notes: user.notes,
+        })),
+        { onConflict: "user_key" }
+      );
+    } catch (upsertErr) {
+      console.error("Error seeding initial users:", upsertErr);
+    }
+    return fallbackUsers;
+  }
+
+  return data.map((row) => {
+    const dateAdded = row.created_at
+      ? new Date(row.created_at).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+          year: "numeric",
+        })
+      : "Jul 4, 2022";
+
+    const lastActive = row.updated_at
+      ? new Date(row.updated_at).toLocaleDateString("en-US", {
+          month: "short",
+          day: "numeric",
+        }) +
+        ", " +
+        new Date(row.updated_at).toLocaleTimeString("en-US", {
+          hour: "2-digit",
+          minute: "2-digit",
+          hour12: false,
+        })
+      : "Today, 08:14";
+
+    return {
+      id: String(row.user_key),
+      name: String(row.display_name || "Anonymous"),
+      email: String(row.email || ""),
+      role: (row.role || "scaler") as any,
+      status: (row.status || "Active") as any,
+      isMuted: Boolean(row.is_muted),
+      isBanned: Boolean(row.is_banned),
+      lastActive,
+      dateAdded,
+      notes: String(row.notes || ""),
+    };
+  });
+}
+
+export async function updateSupabaseUserAccess(
+  userKey: string,
+  updates: {
+    role?: string;
+    status?: string;
+    is_muted?: boolean;
+    is_banned?: boolean;
+    notes?: string;
+    display_name?: string;
+    email?: string;
+  }
+) {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return null;
+
+  const payload: Record<string, any> = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (updates.role !== undefined) payload.role = updates.role;
+  if (updates.status !== undefined) payload.status = updates.status;
+  if (updates.is_muted !== undefined) payload.is_muted = updates.is_muted;
+  if (updates.is_banned !== undefined) payload.is_banned = updates.is_banned;
+  if (updates.notes !== undefined) payload.notes = updates.notes;
+  if (updates.display_name !== undefined) payload.display_name = updates.display_name;
+  if (updates.email !== undefined) payload.email = updates.email;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update(payload)
+    .eq("user_key", userKey)
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error updating user:", error);
+    throw error;
+  }
+
+  return data;
+}
+
+export async function createSupabaseUser(user: {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  notes: string;
+  status: string;
+}) {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .insert({
+      user_key: user.id,
+      display_name: user.name,
+      email: user.email,
+      role: user.role,
+      notes: user.notes,
+      status: user.status,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .select()
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error creating user:", error);
+    throw error;
+  }
+
+  return data;
+}
+

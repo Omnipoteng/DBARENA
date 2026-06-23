@@ -15,6 +15,7 @@ import { setDbaUserKey } from "@/lib/dba-user";
 import Navbar from "@/components/sections/navbar"; 
 import { getSupabaseAuthClient } from "@/lib/supabase-auth";
 import {
+  loadSupabaseOnboardingPreferences,
   loadSupabaseProfileSnapshot,
   loadSupabaseRankedMatches,
   saveSupabaseProfileSnapshot,
@@ -324,6 +325,7 @@ function EditorModal({
   bannerFocus,
   bannerCrop: initialBannerCrop,
   tags,
+  website,
   selectedBorder,
   bannerPreviewUrl,
   onClose,
@@ -339,6 +341,7 @@ function EditorModal({
   bannerFocus: number;
   bannerCrop?: BannerCrop | null;
   tags: string[];
+  website: string;
   selectedBorder: BorderKey;
   bannerPreviewUrl?: string | null;
   onClose: () => void;
@@ -352,11 +355,13 @@ function EditorModal({
     bannerFocus?: number;
     bannerCrop?: BannerCrop | null;
     tags?: string[];
+    website?: string;
     border?: BorderKey;
     bannerFile?: File | null;
   }) => void;
 }) {
   const [draftName, setDraftName] = useState(displayName);
+  const [draftWebsite, setDraftWebsite] = useState(website);
   const [draftUsername, setDraftUsername] = useState(username);
   const [draftBio, setDraftBio] = useState(bio);
   const [draftAvatar, setDraftAvatar] = useState(avatarSrc);
@@ -762,6 +767,17 @@ function EditorModal({
                 />
               </label>
 
+              <label className="grid gap-2">
+                <span className="text-[10px] uppercase tracking-[0.3em] text-black/40 sm:text-xs">Website (Opsional)</span>
+                <input
+                  type="text"
+                  value={draftWebsite}
+                  onChange={(event) => setDraftWebsite(event.target.value)}
+                  className="h-11 rounded-2xl border border-black/10 bg-white px-4 text-sm text-black outline-none transition placeholder:text-black/25 focus:border-black/30 sm:h-12"
+                  placeholder="https://example.com"
+                />
+              </label>
+
               <div className="grid gap-3 rounded-[22px] border border-black/8 bg-black/[0.03] p-3 sm:rounded-[24px] sm:p-4">
                 <div className="flex items-center justify-between gap-4">
                   <div>
@@ -867,6 +883,7 @@ function EditorModal({
                             bannerFocus: draftBannerFocus,
                             bannerCrop: draftBannerCrop,
                             tags: draftTags,
+                            website: draftWebsite,
                             bannerFile: draftBannerKind === "video" ? draftBannerFileRef.current : null,
                           }
                         : { border: draftBorder },
@@ -906,6 +923,9 @@ export default function ProfilePage() {
   const [editorMode, setEditorMode] = useState<EditorMode | null>(null);
   const [loaded, setLoaded] = useState(false);
   const [accessState, setAccessState] = useState<AccessState>("loading");
+  const [activeTab, setActiveTab] = useState<"activity" | "debates" | "achievements" | "inventory" | "perks">("activity");
+  const [userLocation, setUserLocation] = useState("");
+  const [website, setWebsite] = useState("");
 
   const currentRank = rankKey || resolveRank(rankedPoints);
   const rankTheme = rankThemes[currentRank];
@@ -1011,7 +1031,21 @@ export default function ProfilePage() {
         setSelectedBorder(remote.border);
       }
       if (Array.isArray(remote.tags)) {
-        setTags(remote.tags.filter((item): item is string => typeof item === "string"));
+        const rawTags = remote.tags.filter((item): item is string => typeof item === "string");
+        const webTag = rawTags.find((t) => t.startsWith("web:"));
+        if (webTag) {
+          setWebsite(webTag.substring(4));
+        } else {
+          setWebsite("");
+        }
+        setTags(rawTags.filter((t) => !t.startsWith("web:")));
+      }
+
+      const preferences = await loadSupabaseOnboardingPreferences();
+      if (!cancelled && preferences && preferences.location) {
+        setUserLocation(preferences.location);
+      } else if (!cancelled) {
+        setUserLocation("");
       }
 
       if (typeof remote.bannerSrc === "string" && remote.bannerSrc.length > 0) {
@@ -1074,6 +1108,10 @@ export default function ProfilePage() {
   useEffect(() => {
     if (!loaded) return;
     try {
+      const finalTags = [...tags];
+      if (website) {
+        finalTags.push(`web:${website}`);
+      }
       void saveSupabaseProfileSnapshot({ 
         displayName, 
         username, 
@@ -1084,7 +1122,7 @@ export default function ProfilePage() {
         bannerFocus, 
         bannerCrop, 
         border: selectedBorder, 
-        tags,
+        tags: finalTags,
         rankKey,
         rankedPoints,
         highestRank,
@@ -1094,7 +1132,7 @@ export default function ProfilePage() {
     } catch { 
       // ignore storage quota issues so profile edits don't break 
     } 
-  }, [avatarSrc, bannerCrop, bannerFocus, bannerKind, bannerSrc, bio, displayName, highestRank, loaded, rankKey, rankedPoints, selectedBorder, tags, totalMatch, username, winRate]); 
+  }, [avatarSrc, bannerCrop, bannerFocus, bannerKind, bannerSrc, bio, displayName, highestRank, loaded, rankKey, rankedPoints, selectedBorder, tags, website, totalMatch, username, winRate]); 
 
   useEffect(() => {
     return () => {
@@ -1106,10 +1144,10 @@ export default function ProfilePage() {
 
   if (!loaded) {
     return (
-      <div className="min-h-screen bg-[#f8f8f6] text-black">
+      <div className="min-h-screen bg-[#fafaf9] text-black">
         <Navbar />
         <main className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-7xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
-          <p className="text-sm font-medium text-black/55">Menyiapkan profile dari Supabase...</p>
+          <p className="text-[13px] font-medium text-black/40">Menyiapkan profile dari Supabase...</p>
         </main>
       </div>
     );
@@ -1117,31 +1155,31 @@ export default function ProfilePage() {
 
   if (accessState === "guest") {
     return (
-      <div className="min-h-screen bg-[#f8f8f6] text-black">
+      <div className="min-h-screen bg-[#fafaf9] text-black">
         <Navbar />
         <main className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-7xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
-          <div className="w-full max-w-lg border-y border-black/10 bg-white px-5 py-8 text-left sm:px-6">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.42em] text-black/35">
+          <div className="w-full max-w-lg rounded-2xl border border-black/6 bg-white px-6 py-8 shadow-[0_2px_16px_rgba(0,0,0,0.03)] sm:px-8">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-black/30">
               Account required
             </p>
-            <h1 className="mt-3 font-display text-4xl uppercase tracking-[0.06em] text-black sm:text-5xl">
+            <h1 className="mt-3 font-display text-3xl uppercase tracking-[0.04em] text-black sm:text-4xl">
               Anda belum memiliki akun
             </h1>
-            <p className="mt-3 max-w-md text-sm leading-6 text-black/60">
+            <p className="mt-3 max-w-md text-[13px] leading-[1.7] text-black/50">
               Buat akun dulu atau masuk ke akun yang sudah ada supaya profile, token, friends, dan history bisa
               tersambung ke Supabase.
             </p>
 
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-6 flex flex-col gap-2.5 sm:flex-row">
               <Link
                 href="/login?mode=register"
-                className="inline-flex h-11 items-center justify-center border border-black/10 bg-black px-4 text-sm font-semibold text-white transition hover:opacity-90"
+                className="inline-flex h-10 items-center justify-center rounded-xl bg-black px-5 text-[13px] font-semibold text-white transition hover:bg-black/85"
               >
                 Buat akun
               </Link>
               <Link
                 href="/login"
-                className="inline-flex h-11 items-center justify-center border border-black/10 bg-white px-4 text-sm font-semibold text-black transition hover:bg-black/5"
+                className="inline-flex h-10 items-center justify-center rounded-xl border border-black/8 bg-white px-5 text-[13px] font-semibold text-black transition hover:bg-black/[0.03]"
               >
                 Masuk
               </Link>
@@ -1154,31 +1192,31 @@ export default function ProfilePage() {
 
   if (accessState === "onboarding") {
     return (
-      <div className="min-h-screen bg-[#f8f8f6] text-black">
+      <div className="min-h-screen bg-[#fafaf9] text-black">
         <Navbar />
         <main className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-7xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
-          <div className="w-full max-w-lg border-y border-black/10 bg-white px-5 py-8 text-left sm:px-6">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.42em] text-black/35">
+          <div className="w-full max-w-lg rounded-2xl border border-black/6 bg-white px-6 py-8 shadow-[0_2px_16px_rgba(0,0,0,0.03)] sm:px-8">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-black/30">
               Onboarding needed
             </p>
-            <h1 className="mt-3 font-display text-4xl uppercase tracking-[0.06em] text-black sm:text-5xl">
+            <h1 className="mt-3 font-display text-3xl uppercase tracking-[0.04em] text-black sm:text-4xl">
               Profile belum siap
             </h1>
-            <p className="mt-3 max-w-md text-sm leading-6 text-black/60">
+            <p className="mt-3 max-w-md text-[13px] leading-[1.7] text-black/50">
               Akun sudah masuk, tapi preference profile belum lengkap. Lanjutkan onboarding supaya data akun
               tersimpan penuh di database.
             </p>
 
-            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <div className="mt-6 flex flex-col gap-2.5 sm:flex-row">
               <Link
                 href="/onboarding"
-                className="inline-flex h-11 items-center justify-center border border-black/10 bg-black px-4 text-sm font-semibold text-white transition hover:opacity-90"
+                className="inline-flex h-10 items-center justify-center rounded-xl bg-black px-5 text-[13px] font-semibold text-white transition hover:bg-black/85"
               >
                 Lanjut onboarding
               </Link>
               <Link
                 href="/login"
-                className="inline-flex h-11 items-center justify-center border border-black/10 bg-white px-4 text-sm font-semibold text-black transition hover:bg-black/5"
+                className="inline-flex h-10 items-center justify-center rounded-xl border border-black/8 bg-white px-5 text-[13px] font-semibold text-black transition hover:bg-black/[0.03]"
               >
                 Kembali ke login
               </Link>
@@ -1190,389 +1228,585 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8f8f6] text-black">
+    <div className="min-h-screen bg-white text-black font-sans">
       <Navbar />
 
-      <main className="mx-auto flex min-h-screen w-full max-w-7xl flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+      <main className="w-full flex flex-col pb-16">
+        {/* Banner Section - Edge-to-Edge */}
+        <div className="relative w-full h-44 sm:h-60 md:h-72 lg:h-80 bg-zinc-900 overflow-hidden border-b border-zinc-200">
+          {bannerKind === "video" && bannerPreviewUrl ? (
+            <video
+              src={bannerPreviewUrl}
+              className="absolute inset-0 h-full w-full object-cover"
+              autoPlay
+              loop
+              muted
+              playsInline
+              style={{
+                ...(bannerCrop ? {
+                  objectPosition: `${bannerCrop.x}% ${bannerCrop.y}%`,
+                  transform: bannerCrop.zoom > 1 ? `scale(${bannerCrop.zoom})` : undefined,
+                  transformOrigin: `${bannerCrop.x}% ${bannerCrop.y}%`,
+                } : {}),
+              }}
+            />
+          ) : bannerSrc ? (
+            <Image
+              src={bannerSrc}
+              alt="Profile banner"
+              fill
+              sizes="100vw"
+              unoptimized
+              className="object-cover"
+              style={{ objectPosition: bannerSrc.startsWith("data:") ? "50% 50%" : `50% ${bannerFocus}%` }}
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-800 to-zinc-950" />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-transparent" />
+        </div>
 
-        <section className="mt-6 overflow-hidden rounded-[32px] border border-black/8 bg-white shadow-[0_18px_50px_rgba(15,23,42,0.06)]">
-          <div className="relative h-36 overflow-hidden border-b border-black/8 sm:h-44 lg:h-48">
-            {bannerKind === "video" && bannerPreviewUrl ? (
-              <video
-                src={bannerPreviewUrl}
-                className="absolute inset-0 h-full w-full"
-                autoPlay
-                loop
-                muted
-                playsInline
-                style={{
-                  objectFit: "cover",
-                  ...(bannerCrop ? {
-                    objectPosition: `${bannerCrop.x}% ${bannerCrop.y}%`,
-                    transform: bannerCrop.zoom > 1 ? `scale(${bannerCrop.zoom})` : undefined,
-                    transformOrigin: `${bannerCrop.x}% ${bannerCrop.y}%`,
-                  } : {}),
-                }}
-              />
-            ) : bannerSrc ? (
-                <Image
-                  src={bannerSrc}
-                  alt="Profile banner"
-                  fill
-                  sizes="(max-width: 1024px) 100vw, 1280px"
-                  unoptimized
-                  className="object-cover"
-                  style={{ objectPosition: bannerSrc.startsWith("data:") ? "50% 50%" : `50% ${bannerFocus}%` }}
-                />
-            ) : (
-              <div className="absolute inset-0 bg-[linear-gradient(135deg,_#111111_0%,_#d9d9d7_45%,_#f7f5ef_100%)]" />
-            )}
-            <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,_rgba(255,255,255,0.55)_0%,_transparent_42%),radial-gradient(circle_at_80%_0%,_rgba(25,215,255,0.22)_0%,_transparent_35%)]" />
-            <div className="absolute inset-x-0 bottom-0 h-20 bg-[linear-gradient(180deg,transparent_0%,rgba(255,255,255,0.6)_100%)]" />
-          </div>
-
-          <div className="relative px-5 pb-5 sm:px-6">
-            <div className="-mt-14 flex flex-col gap-5 lg:-mt-18 lg:flex-row lg:items-end lg:justify-between">
-              <div className="flex flex-col gap-5 lg:flex-row lg:items-end">
-                <div className="relative h-36 w-36 shrink-0 lg:h-44 lg:w-44">
-                  {selectedBorder === "none" ? (
-                    <div className="relative h-full w-full overflow-hidden rounded-full border-[4px] border-black/12 bg-white">
-                      <Image
-                        src={avatarSrc}
-                        alt="Profile avatar preview"
-                        fill
-                        sizes="208px"
-                        unoptimized
-                        className="object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <ElectricBorder
-                      color={borderTheme.electricColor}
-                      speed={1}
-                      chaos={0.12}
-                      borderRadius={999}
-                      className="h-full w-full"
-                    >
-                      <div className="relative h-full w-full rounded-full bg-white p-1.5">
-                        <div className="relative h-full w-full overflow-hidden rounded-full border-[4px] border-black/12 bg-white shadow-[inset_0_0_0_1px_rgba(255,255,255,0.9)]">
-                          <Image
-                            src={avatarSrc}
-                            alt="Profile avatar preview"
-                            fill
-                            sizes="208px"
-                            unoptimized
-                            className="object-cover"
-                          />
-                        </div>
-                      </div>
-                    </ElectricBorder>
-                  )}
-                  <div
-                    className="absolute -bottom-3 left-1/2 z-10 h-12 w-12 -translate-x-1/2 rounded-full border border-black/10 bg-white p-1.5 shadow-[0_12px_24px_rgba(0,0,0,0.16)]"
-                    style={selectedBorder !== "none" ? { boxShadow: `0 0 34px ${borderTheme.glow}` } : undefined}
-                  >
-                    <RankEmblem variant={rankTheme.emblem} />
-                  </div>
-                </div>
-
-                <div className="min-w-0 pb-1 pt-3 sm:pt-4">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <h2 className="font-display text-3xl uppercase tracking-[0.08em] text-black sm:text-4xl">
-                      {displayName}
-                    </h2>
-                    <div className="flex items-center gap-2">
-                      <RankBadge rank={currentRank} />
-                      <div className="relative sm:hidden">
-                        <button
-                          type="button"
-                          onClick={() => setMenuOpen((value) => !value)}
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-black/10 bg-white text-lg font-semibold text-black transition hover:bg-black hover:text-white"
-                          aria-label="Open profile menu"
-                        >
-                          ⋮
-                        </button>
-
-                        {menuOpen ? (
-                          <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_24px_80px_rgba(0,0,0,0.18)]">
-                            {menuItems.map((item) => (
-                              <button
-                                key={item.label}
-                                type="button"
-                                onClick={() => {
-                                  setEditorMode(item.target);
-                                  setMenuOpen(false);
-                                }}
-                                className="flex h-11 w-full items-center rounded-2xl px-4 text-left text-sm text-black/70 transition hover:bg-black/[0.04] hover:text-black"
-                              >
-                                {item.label}
-                              </button>
-                            ))}
-                          </div>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                  <p className="mt-1 text-sm leading-none text-black/55">{username}</p>
-                  <p className="mt-4 max-w-2xl text-sm leading-6 text-black/65">{bio}</p>
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    {tags.map((tag) => (
-                      <span key={tag} className="rounded-full bg-black/[0.04] px-3 py-1 text-xs text-black/70">
-                        {tag}
-                      </span>
-                    ))}
-                    <span className="rounded-full border border-black/10 bg-white px-3 py-1 text-xs text-black/70">
-                      Border: {borderTheme.label}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="relative hidden self-start sm:block">
-                <button
-                  type="button"
-                  onClick={() => setMenuOpen((value) => !value)}
-                  className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-black/10 bg-white text-xl font-semibold text-black transition hover:bg-black hover:text-white"
-                  aria-label="Open profile menu"
-                >
-                  ⋮
-                </button>
-
-                {menuOpen ? (
-                  <div className="absolute right-0 top-13 z-20 w-64 rounded-[22px] border border-black/10 bg-white p-2 shadow-[0_24px_80px_rgba(0,0,0,0.18)]">
-                    {menuItems.map((item) => (
-                    <button
-                      key={item.label}
-                      type="button"
-                      onClick={() => {
-                          setEditorMode(item.target);
-                          setMenuOpen(false);
-                        }}
-                        className="flex h-11 w-full items-center rounded-2xl px-4 text-left text-sm text-black/70 transition hover:bg-black/[0.04] hover:text-black"
-                      >
-                        {item.label}
-                      </button>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-          </div>
-        </section>
-
-        <section className="mt-6 grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[30px] border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)] sm:p-6">
-            <div className="flex items-center justify-between gap-3 border-b border-black/8 pb-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-black/40">
-                  Overview
-                </p>
-                <h3 className="mt-2 text-2xl font-semibold text-black">Account summary</h3>
-              </div>
-              <span className="rounded-full border border-black/10 bg-black/[0.03] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-black/55">
-                DBA profile
-              </span>
-            </div>
-
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              {profileStats.map((item) => (
-                <div key={item.label} className="rounded-2xl border border-black/8 bg-black/[0.02] p-4">
-                  <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">{item.label}</p>
-                  <p className="mt-2 text-lg font-semibold text-black">{item.value}</p>
-                </div>
-              ))}
-            </div>
-
-            <div className="mt-5 rounded-[26px] border border-black/8 bg-gradient-to-br from-black/[0.02] to-white p-5">
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-black/40">
-                Featured rank
-              </p>
-              <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center">
-                <div className={`rounded-full p-4 ${rankTheme.accent}`}>
-                  <div className="h-24 w-24">
-                    <RankEmblem variant={rankTheme.emblem} />
-                  </div>
-                </div>
-                <div className="min-w-0">
-                  <p className="font-display text-4xl uppercase tracking-[0.08em] text-black">
-                    {rankTheme.title}
-                  </p>
-                  <p className="mt-2 text-sm text-black/55">{rankTheme.subtitle}</p>
-                  <p className="mt-3 max-w-lg text-sm leading-6 text-black/65">
-                    Border rank, statistik, dan match history disusun seperti akun sosial kompetitif yang
-                    tetap fokus ke battleboarding DBA.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-[30px] border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)] sm:p-6">
-            <div className="flex items-center justify-between gap-3 border-b border-black/8 pb-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.24em] text-black/40">
-                  Quick view
-                </p>
-                <h3 className="mt-2 text-2xl font-semibold text-black">Live status</h3>
-              </div>
-              <span className="rounded-full border border-black/10 bg-black/[0.03] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-black/55">
-                {currentRank}
-              </span>
-            </div>
-
-            <div className="mt-6 space-y-3">
-              {[
-                { title: "Border", value: borderTheme.label },
-                { title: "Ranked points", value: rankedPoints.toString() },
-                { title: "Win rate", value: profileStats[3].value },
-                { title: "Focus", value: "AP / Speed" },
-              ].map((item) => (
-                <div key={item.title} className="flex items-center justify-between rounded-2xl border border-black/8 bg-black/[0.02] px-4 py-4">
-                  <span className="text-xs uppercase tracking-[0.28em] text-black/35">{item.title}</span>
-                  <span className="text-sm font-semibold text-black">{item.value}</span>
-                </div>
-              ))}
-            </div>
-
-            <Link
-              href="/ranked"
-              className="mt-5 inline-flex h-11 w-full items-center justify-center rounded-full bg-black px-4 text-sm font-semibold text-white transition hover:opacity-90"
-            >
-              Open ranked ladder
-            </Link>
-            <Link
-              href="/friends"
-              className="mt-3 inline-flex h-11 w-full items-center justify-center border border-black/10 bg-white px-4 text-sm font-semibold text-black transition hover:bg-black/5"
-            >
-              Find friends
-            </Link>
-          </div>
-        </section>
-
-        <section className="mt-6 rounded-[30px] border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)] sm:p-6">
-          <div className="flex items-center justify-between gap-3 border-b border-black/8 pb-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-black/40">
-                Rank stat
-              </p>
-              <h3 className="mt-2 text-2xl font-semibold text-black">Current rank</h3>
-            </div>
-            <span className="rounded-full border border-black/10 bg-black/[0.03] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-black/55">
-              {rankProgress.current} → {rankProgress.next}
-            </span>
-          </div>
-
-          <div className="mt-6 grid gap-3 sm:grid-cols-2">
-            <div className="rounded-2xl border border-black/8 bg-black/[0.02] p-4">
-              <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">Current rank</p>
-              <p className="mt-2 text-lg font-semibold text-black">{rankTheme.title}</p>
-            </div>
-            <div className="rounded-2xl border border-black/8 bg-black/[0.02] p-4">
-              <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">Highest rank</p>
-              <p className="mt-2 text-lg font-semibold text-black">Mythic</p>
-            </div>
-            <div className="rounded-2xl border border-black/8 bg-black/[0.02] p-4">
-              <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">Total match</p>
-              <p className="mt-2 text-lg font-semibold text-black">{profileStats[0].value}</p>
-            </div>
-            <div className="rounded-2xl border border-black/8 bg-black/[0.02] p-4">
-              <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">Win rate</p>
-              <p className="mt-2 text-lg font-semibold text-black">{profileStats[3].value}</p>
-            </div>
-          </div>
-
-          <div className="mt-5">
-            <div className="h-3 rounded-full bg-black/10">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-black via-slate-500 to-slate-300 transition-all duration-500"
-                style={{ width: `${rankProgress.progress}%` }}
-              />
-            </div>
-            <div className="mt-3 flex items-center justify-between text-xs text-black/45">
-              <span>0</span>
-              <span>{rankedPoints}</span>
-              <span>8500+</span>
-            </div>
-          </div>
-        </section>
-
-        <section className="mt-6 rounded-[30px] border border-black/8 bg-white p-5 shadow-[0_12px_30px_rgba(15,23,42,0.05)] sm:p-6">
-          <div className="flex items-center justify-between gap-3 border-b border-black/8 pb-4">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.24em] text-black/40">
-                Recent match
-              </p>
-              <h3 className="mt-2 text-2xl font-semibold text-black">Match history</h3>
-            </div>
-            <span className="rounded-full border border-black/10 bg-black/[0.03] px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-black/55">
-              Private battle logs
-            </span>
-          </div>
-
-          {recentMatches.length > 0 ? (
-            <div className="mt-5 grid gap-4 xl:grid-cols-3">
-              {recentMatches.map((match) => (
-                <article key={`${match.opponent}-${match.date}`} className="overflow-hidden border border-black/8 bg-black/[0.02]">
-                  <div className="relative aspect-[4/3] bg-black/5">
+        {/* Content Section - Constrained Width (X/Github profile look) */}
+        <div className="mx-auto w-full max-w-4xl px-4 sm:px-6 lg:px-8">
+          
+          {/* Header Profile Area */}
+          <div className="relative pb-6 border-b border-zinc-200">
+            {/* Avatar & Action Buttons Row */}
+            <div className="flex justify-between items-end -mt-16 sm:-mt-20 md:-mt-24 mb-4 relative">
+              {/* Avatar */}
+              <div className="relative h-28 w-28 sm:h-36 sm:w-36 md:h-40 md:w-40 rounded-full bg-white p-1 shadow-md shrink-0">
+                {selectedBorder === "none" ? (
+                  <div className="relative h-full w-full overflow-hidden rounded-full border-2 border-white bg-zinc-100">
                     <Image
-                      src={match.image}
-                      alt={`${match.opponent} match preview`}
+                      src={avatarSrc}
+                      alt="Profile avatar"
                       fill
-                      sizes="(max-width: 1280px) 100vw, 33vw"
-                      className="object-cover grayscale contrast-110"
+                      sizes="(max-width: 640px) 112px, 160px"
+                      unoptimized
+                      className="object-cover"
                     />
                   </div>
-                  <div className="space-y-3 border-t border-black/8 p-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div>
-                        <p className="font-semibold text-black">{match.opponent}</p>
-                        <p className="mt-1 text-xs text-black/45">
-                          {match.platform} - {match.date}
-                        </p>
+                ) : (
+                  <ElectricBorder
+                    color={borderTheme.electricColor}
+                    speed={1}
+                    chaos={0.12}
+                    borderRadius={999}
+                    className="h-full w-full"
+                  >
+                    <div className="relative h-full w-full rounded-full bg-white p-0.5">
+                      <div className="relative h-full w-full overflow-hidden rounded-full border-2 border-white bg-zinc-100">
+                        <Image
+                          src={avatarSrc}
+                          alt="Profile avatar"
+                          fill
+                          sizes="(max-width: 640px) 112px, 160px"
+                          unoptimized
+                          className="object-cover"
+                        />
                       </div>
-                      <span
-                        className={`rounded-full px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.35em] ${
-                          match.result === "Win" ? "bg-black text-white" : "bg-black/10 text-black/60"
-                        }`}
-                      >
-                        {match.result}
-                      </span>
                     </div>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="border border-black/8 bg-white p-3">
-                        <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">Progress</p>
-                        <p className="mt-2 text-sm font-semibold text-black">
-                          {match.fromRank} → {match.toRank}
-                        </p>
-                      </div>
-                      <div className="border border-black/8 bg-white p-3">
-                        <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">Points change</p>
-                        <p className="mt-2 text-sm font-semibold text-black">{match.delta}</p>
-                      </div>
+                  </ElectricBorder>
+                )}
+                {/* Emblem Overlay */}
+                <div
+                  className="absolute -bottom-1 left-1/2 z-10 h-7 w-7 sm:h-9 sm:w-9 -translate-x-1/2 rounded-full border border-zinc-200 bg-white p-1 shadow-sm"
+                  style={selectedBorder !== "none" ? { boxShadow: `0 0 16px ${borderTheme.glow}` } : undefined}
+                >
+                  <RankEmblem variant={rankTheme.emblem} />
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex gap-2 items-center">
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setMenuOpen((value) => !value)}
+                    className="inline-flex h-9 px-4 items-center justify-center rounded-full border border-zinc-300 bg-white text-xs sm:text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
+                  >
+                    Edit Profile
+                  </button>
+
+                  {menuOpen ? (
+                    <div className="absolute right-0 top-full z-20 mt-2 w-52 rounded-xl border border-zinc-200 bg-white p-1.5 shadow-lg">
+                      {menuItems.map((item) => (
+                        <button
+                          key={item.label}
+                          type="button"
+                          onClick={() => {
+                            setEditorMode(item.target);
+                            setMenuOpen(false);
+                          }}
+                          className="flex h-9 w-full items-center rounded-lg px-3 text-left text-xs sm:text-sm font-medium text-zinc-600 transition hover:bg-zinc-100 hover:text-black"
+                        >
+                          {item.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+                <button
+                  type="button"
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-zinc-300 bg-white text-zinc-600 transition hover:bg-zinc-50"
+                  aria-label="Share profile"
+                >
+                  <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8.684 10.742l4.632-2.316m0 0a3 3 0 100-4.632 3 3 0 000 4.632zm0 4.632l-4.632 2.316m0 0a3 3 0 100 4.632 3 3 0 000-4.632z" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            {/* User Details */}
+            <div className="mt-2 space-y-3">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="font-display text-2xl sm:text-3xl uppercase tracking-wider text-black">
+                    {displayName}
+                  </h2>
+                  <RankBadge rank={currentRank} />
+                </div>
+                <p className="text-sm text-zinc-400 font-normal">@{username}</p>
+              </div>
+
+              {bio ? (
+                <p className="text-sm sm:text-[15px] leading-relaxed text-zinc-700 font-normal whitespace-pre-wrap">
+                  {bio}
+                </p>
+              ) : (
+                <p className="text-sm text-zinc-400 italic font-normal">Belum ada deskripsi bio.</p>
+              )}
+
+              {/* Location, Date, Web */}
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs sm:text-sm text-zinc-500 font-normal">
+                {userLocation && (
+                  <span className="flex items-center gap-1">
+                    <svg className="h-4 w-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                    {userLocation}
+                  </span>
+                )}
+                {website && (
+                  <a
+                    href={website.startsWith("http") ? website : `https://${website}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-1 text-black hover:underline cursor-pointer"
+                  >
+                    <svg className="h-4 w-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                    </svg>
+                    {website}
+                  </a>
+                )}
+                <span className="flex items-center gap-1">
+                  <svg className="h-4 w-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  Bergabung Juni 2026
+                </span>
+              </div>
+
+              {/* Tags (Location/Border/Fokus info) */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {tags.map((tag) => (
+                  <span key={tag} className="rounded-full bg-zinc-100 px-3 py-0.5 text-xs font-medium text-zinc-600 border border-zinc-200">
+                    {tag}
+                  </span>
+                ))}
+                <span className="rounded-full bg-zinc-50 border border-zinc-200 px-3 py-0.5 text-xs font-medium text-zinc-500">
+                  {borderTheme.label}
+                </span>
+              </div>
+
+              {/* Profile stats inline (Followers, Following, Friends, Debates, Wins, Losses, Tokens) */}
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-2 text-xs sm:text-sm text-zinc-600 font-normal">
+                <span className="flex gap-1">
+                  <strong className="font-semibold text-black">186</strong>
+                  <span className="text-zinc-500">Following</span>
+                </span>
+                <span className="flex gap-1">
+                  <strong className="font-semibold text-black">1.2K</strong>
+                  <span className="text-zinc-500">Followers</span>
+                </span>
+                <span className="flex gap-1">
+                  <strong className="font-semibold text-black">45</strong>
+                  <span className="text-zinc-500">Friends</span>
+                </span>
+                <span className="flex gap-1">
+                  <strong className="font-semibold text-black">{totalMatch}</strong>
+                  <span className="text-zinc-500">Debates</span>
+                </span>
+                <span className="flex gap-1">
+                  <strong className="font-semibold text-black">{Number.isFinite(totalMatch * (winRate / 100)) ? (totalMatch * (winRate / 100)).toFixed(0) : "0"}</strong>
+                  <span className="text-zinc-500">Wins</span>
+                </span>
+                <span className="flex gap-1">
+                  <strong className="font-semibold text-black">{Number.isFinite(totalMatch * ((100 - winRate) / 100)) ? (totalMatch * ((100 - winRate) / 100)).toFixed(0) : "0"}</strong>
+                  <span className="text-zinc-500">Losses</span>
+                </span>
+                <span className="flex gap-1">
+                  <strong className="font-semibold text-black">350</strong>
+                  <span className="text-zinc-500">Tokens</span>
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Tabs Bar */}
+          <div className="flex border-b border-zinc-200 overflow-x-auto scrollbar-none bg-white z-10">
+            {(["activity", "debates", "achievements", "inventory", "perks"] as const).map((tab) => {
+              const label = tab === "activity" ? "Activity" 
+                          : tab === "debates" ? "Debates" 
+                          : tab === "achievements" ? "Achievements" 
+                          : tab === "inventory" ? "Inventory" 
+                          : "Supporter Perks";
+              const active = activeTab === tab;
+              return (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => setActiveTab(tab)}
+                  className={`relative flex-1 py-3.5 px-4 text-center text-xs sm:text-sm font-semibold tracking-wider transition-colors hover:bg-zinc-50 shrink-0 ${
+                    active ? "text-black animate-fade-in" : "text-zinc-500 hover:text-zinc-800"
+                  }`}
+                >
+                  {label}
+                  {active && (
+                    <div className="absolute bottom-0 left-0 right-0 h-[3px] bg-black rounded-full" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Dynamic Tab Contents */}
+          {activeTab === "activity" && (
+            <div className="mt-6 space-y-6">
+              {/* Current Rank Card */}
+              <section className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="font-display text-lg uppercase tracking-wider text-black">Current Rank Progress</h3>
+                    <p className="text-xs text-zinc-400 font-normal">Point required for the next rank tier</p>
+                  </div>
+                  <span className="inline-flex items-center rounded-full bg-zinc-100 border border-zinc-200 px-3 py-1 text-[11px] font-semibold text-zinc-800 uppercase tracking-wider">
+                    {rankProgress.current} → {rankProgress.next}
+                  </span>
+                </div>
+
+                <div className="bg-zinc-50 border border-zinc-200 p-5 rounded-2xl">
+                  <div className="h-2.5 overflow-hidden rounded-full bg-zinc-200">
+                    <div
+                      className="h-full rounded-full bg-black transition-all duration-700 ease-out"
+                      style={{ width: `${rankProgress.progress}%` }}
+                    />
+                  </div>
+                  <div className="mt-2.5 flex items-center justify-between text-xs font-semibold text-zinc-500">
+                    <span>0 pts</span>
+                    <span className="text-black font-bold">{rankedPoints} pts</span>
+                    <span>8500+ pts</span>
+                  </div>
+                </div>
+              </section>
+
+              {/* Match History */}
+              <section className="space-y-4 pt-2">
+                <div>
+                  <h3 className="font-display text-lg uppercase tracking-wider text-black">Recent Matches</h3>
+                  <p className="text-xs text-zinc-400 font-normal">Logs of latest battleboarding matches in the arena</p>
+                </div>
+
+                {recentMatches.length > 0 ? (
+                  <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+                    {recentMatches.map((match) => (
+                      <article key={`${match.opponent}-${match.date}`} className="overflow-hidden bg-white border border-zinc-200 rounded-xl transition hover:border-zinc-400 hover:shadow-sm">
+                        <div className="relative aspect-[4/3] bg-zinc-50">
+                          <Image
+                            src={match.image}
+                            alt={`${match.opponent} match preview`}
+                            fill
+                            sizes="(max-width: 768px) 100vw, 250px"
+                            className="object-cover grayscale hover:grayscale-0 transition duration-300"
+                          />
+                        </div>
+                        <div className="p-4 space-y-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-semibold text-black">{match.opponent}</p>
+                              <p className="text-[11px] text-zinc-400 font-normal">
+                                {match.platform} · {match.date}
+                              </p>
+                            </div>
+                            <span
+                              className={`rounded px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wider ${
+                                match.result === "Win" ? "bg-black text-white" : "bg-zinc-100 text-zinc-500 border border-zinc-200"
+                              }`}
+                            >
+                              {match.result}
+                            </span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 text-center text-xs font-normal">
+                            <div className="bg-zinc-50 border border-zinc-100 p-2 rounded-lg">
+                              <span className="block text-[9px] uppercase tracking-wider text-zinc-400">Rank Path</span>
+                              <span className="font-semibold text-zinc-700">{match.toRank}</span>
+                            </div>
+                            <div className="bg-zinc-50 border border-zinc-100 p-2 rounded-lg">
+                              <span className="block text-[9px] uppercase tracking-wider text-zinc-400">Delta</span>
+                              <span className={`font-semibold ${match.delta.startsWith("-") ? "text-red-600" : "text-emerald-600"}`}>
+                                {match.delta}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-xl border border-zinc-200 bg-zinc-50/50 p-8 text-center">
+                    <p className="font-display text-base uppercase text-zinc-500">Belum ada riwayat match</p>
+                    <p className="mt-1 text-xs text-zinc-400 max-w-sm mx-auto font-normal">
+                      Riwayat battle akan tercatat di sini setelah Anda menyelesaikan pertarungan resmi.
+                    </p>
+                    <Link
+                      href="/ranked"
+                      className="mt-4 inline-flex h-9 items-center justify-center rounded-full border border-zinc-300 bg-white px-4 text-xs font-semibold text-zinc-700 transition hover:bg-zinc-50"
+                    >
+                      Buka Ranked Ladder
+                    </Link>
+                  </div>
+                )}
+              </section>
+            </div>
+          )}
+
+          {activeTab === "debates" && (
+            <div className="mt-6 space-y-6">
+              {/* Account Summary Stats */}
+              <section className="space-y-4">
+                <div>
+                  <h3 className="font-display text-lg uppercase tracking-wider text-black">Account Summary</h3>
+                  <p className="text-xs text-zinc-400 font-normal">Detailed statistics of your battle boarding debates</p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+                  {profileStats.map((item) => (
+                    <div key={item.label} className="border border-zinc-200 bg-white p-4 rounded-xl text-center">
+                      <span className="block text-[10px] font-semibold uppercase tracking-wider text-zinc-400">{item.label}</span>
+                      <span className="block mt-1.5 text-xl font-bold text-black">{item.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              {/* Featured Rank */}
+              <section className="space-y-4 pt-2">
+                <div>
+                  <h3 className="font-display text-lg uppercase tracking-wider text-black">Featured Arena Rank</h3>
+                  <p className="text-xs text-zinc-400 font-normal">Your current status symbol in the global community</p>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center gap-6 border border-zinc-200 p-5 rounded-2xl bg-zinc-50/50">
+                  <div className={`rounded-xl p-4 ${rankTheme.accent} shrink-0`}>
+                    <div className="h-20 w-20 sm:h-24 sm:w-24">
+                      <RankEmblem variant={rankTheme.emblem} />
                     </div>
                   </div>
-                </article>
-              ))}
-            </div>
-          ) : (
-            <div className="mt-5 border-t border-black/8 pt-5">
-              <div className="border border-black/8 bg-black/[0.02] p-5">
-                <p className="text-[10px] uppercase tracking-[0.35em] text-black/35">Recent match</p>
-                <p className="mt-2 text-lg font-semibold text-black">Belum ada log match tersimpan</p>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-black/60">
-                  Riwayat battle akan muncul di sini setelah sistem ranked / match history terhubung ke database.
-                </p>
+                  <div className="text-center sm:text-left space-y-2">
+                    <h4 className="font-display text-2xl uppercase tracking-wider text-black">{rankTheme.title}</h4>
+                    <p className="text-xs font-semibold uppercase tracking-widest text-zinc-400">{rankTheme.subtitle}</p>
+                    <p className="text-sm text-zinc-600 leading-relaxed max-w-lg font-normal">
+                      Border rank, statistik, dan riwayat match disusun secara rapi untuk mengedepankan reputasi Anda sebagai debater. Dapatkan poin dari memenangkan duel dan naik ke kasta lebih tinggi.
+                    </p>
+                  </div>
+                </div>
+              </section>
+
+              {/* Actions Section */}
+              <section className="pt-4 border-t border-zinc-200 flex flex-col sm:flex-row gap-3">
                 <Link
                   href="/ranked"
-                  className="mt-4 inline-flex h-11 items-center justify-center border border-black/10 bg-white px-4 text-sm font-semibold text-black transition hover:bg-black/[0.03]"
+                  className="inline-flex h-10 flex-1 items-center justify-center rounded-full bg-black px-4 text-xs sm:text-sm font-semibold text-white transition hover:opacity-90"
                 >
-                  Buka ranked ladder
+                  Open Ranked Ladder
                 </Link>
+                <Link
+                  href="/friends"
+                  className="inline-flex h-10 flex-1 items-center justify-center rounded-full border border-zinc-300 bg-white px-4 text-xs sm:text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50"
+                >
+                  Find Friends
+                </Link>
+              </section>
+            </div>
+          )}
+
+          {activeTab === "achievements" && (
+            <div className="mt-6 space-y-6">
+              <div>
+                <h3 className="font-display text-lg uppercase tracking-wider text-black">Debater Achievements</h3>
+                <p className="text-xs text-zinc-400 font-normal">Badge and milestones unlocked from competitive matches</p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                {/* Achievement 1: Rank */}
+                <div className="flex items-start gap-4 border border-zinc-200 p-4 rounded-xl bg-white">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 font-bold shrink-0">
+                    🏆
+                  </div>
+                  <div className="space-y-1 font-normal">
+                    <h4 className="text-sm font-semibold text-black">Highest Rank Reached</h4>
+                    <p className="text-xs text-zinc-500">You achieved the prestigious rank of <strong className="font-semibold text-black">{highestRank}</strong> in the arena.</p>
+                  </div>
+                </div>
+
+                {/* Achievement 2: Win Rate */}
+                <div className="flex items-start gap-4 border border-zinc-200 p-4 rounded-xl bg-white">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 font-bold shrink-0">
+                    ⚡
+                  </div>
+                  <div className="space-y-1 font-normal">
+                    <h4 className="text-sm font-semibold text-black">Win Rate Record</h4>
+                    <p className="text-xs text-zinc-500">Maintaining an impressive <strong className="font-semibold text-black">{Number.isFinite(winRate) ? winRate.toFixed(0) : "0"}%</strong> win rate across all official debates.</p>
+                  </div>
+                </div>
+
+                {/* Achievement 3: Total Matches */}
+                <div className="flex items-start gap-4 border border-zinc-200 p-4 rounded-xl bg-white">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 font-bold shrink-0">
+                    ⚔️
+                  </div>
+                  <div className="space-y-1 font-normal">
+                    <h4 className="text-sm font-semibold text-black">Veteran Fighter</h4>
+                    <p className="text-xs text-zinc-500">Participated in <strong className="font-semibold text-black">{totalMatch}</strong> total debates in the community arena.</p>
+                  </div>
+                </div>
+
+                {/* Achievement 4: Tokens */}
+                <div className="flex items-start gap-4 border border-zinc-200 p-4 rounded-xl bg-white">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-zinc-100 text-zinc-700 font-bold shrink-0">
+                    💎
+                  </div>
+                  <div className="space-y-1 font-normal">
+                    <h4 className="text-sm font-semibold text-black">Token Collector</h4>
+                    <p className="text-xs text-zinc-500">Accrued tokens for marketplace trade and customization.</p>
+                  </div>
+                </div>
               </div>
             </div>
           )}
-        </section>
+
+          {activeTab === "inventory" && (
+            <div className="mt-6 space-y-6">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="font-display text-lg uppercase tracking-wider text-black">Border Inventory</h3>
+                  <p className="text-xs text-zinc-400 font-normal">Customize the visual borders around your profile avatar</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditorMode("border")}
+                  className="inline-flex h-9 px-4 items-center justify-center rounded-full bg-black text-xs font-semibold text-white transition hover:opacity-90"
+                >
+                  Change Border
+                </button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                {(["none", "legend", "mythic", "apex"] as BorderKey[]).map((border) => {
+                  const theme = borderThemes[border];
+                  const active = selectedBorder === border;
+                  return (
+                    <div
+                      key={border}
+                      className={`flex items-center gap-4 rounded-xl border p-4 transition ${
+                        active
+                          ? "border-black bg-zinc-50"
+                          : "border-zinc-200 bg-white"
+                      }`}
+                    >
+                      <div className="shrink-0 scale-90">
+                        <BorderSwatch border={border} active={active} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-semibold text-black">{theme.label}</p>
+                          {active && (
+                            <span className="rounded bg-black px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-white">
+                              Equipped
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-1 text-xs text-zinc-500 font-normal">{theme.description}</p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {activeTab === "perks" && (
+            <div className="mt-6 space-y-6">
+              <div>
+                <h3 className="font-display text-lg uppercase tracking-wider text-black">Supporter Perks</h3>
+                <p className="text-xs text-zinc-400 font-normal">Exclusive perks unlocked for active contributors</p>
+              </div>
+
+              <div className="border border-zinc-200 p-5 rounded-2xl bg-zinc-50/50 space-y-4">
+                <div className="flex items-start gap-4">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-black text-white shrink-0 font-normal">
+                    🎬
+                  </div>
+                  <div className="space-y-1 font-normal">
+                    <h4 className="text-sm font-semibold text-black">Custom Video Banner</h4>
+                    <p className="text-xs text-zinc-500">
+                      You can upload short videos (up to 10 seconds) to be played directly on your profile page. This is currently enabled for your account.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-black text-white shrink-0 font-normal">
+                    🌈
+                  </div>
+                  <div className="space-y-1 font-normal">
+                    <h4 className="text-sm font-semibold text-black">Animated Avatar Borders</h4>
+                    <p className="text-xs text-zinc-500">
+                      Gain access to Legend, Mythic, and Apex borders featuring custom conic and electric glow animations.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-start gap-4">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-full bg-black text-white shrink-0 font-normal">
+                    🏷️
+                  </div>
+                  <div className="space-y-1 font-normal">
+                    <h4 className="text-sm font-semibold text-black">Profile Tags</h4>
+                    <p className="text-xs text-zinc-500">
+                      Apply up to 6 custom text tags on your profile header to specify your specialties, location, and credentials.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-zinc-200 flex flex-col sm:flex-row gap-3 items-center justify-between font-normal">
+                  <p className="text-xs text-zinc-400">Thank you for supporting DBA community development!</p>
+                  <button
+                    type="button"
+                    onClick={() => setEditorMode("profile")}
+                    className="inline-flex h-9 px-4 items-center justify-center rounded-full border border-zinc-300 bg-white text-xs font-semibold text-zinc-700 transition hover:bg-zinc-50"
+                  >
+                    Manage Profile Media
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
 
         {editorMode ? (
           <EditorModal
@@ -1586,6 +1820,7 @@ export default function ProfilePage() {
             bannerFocus={bannerFocus}
             bannerCrop={bannerCrop}
             tags={tags}
+            website={website}
             selectedBorder={selectedBorder}
             bannerPreviewUrl={bannerPreviewUrl}
             onClose={() => setEditorMode(null)}
@@ -1619,6 +1854,7 @@ export default function ProfilePage() {
               }
               if (typeof next.bannerFocus === "number") setBannerFocus(next.bannerFocus);
               if (Array.isArray(next.tags)) setTags(next.tags);
+              if (typeof next.website === "string") setWebsite(next.website);
               if (next.border) setSelectedBorder(next.border);
             }}
           />
