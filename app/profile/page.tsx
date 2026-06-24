@@ -178,6 +178,7 @@ const menuItems: Array<{ label: string; kind: "edit"; target: EditorMode }> = [
   { label: "Kustomisasi Border", kind: "edit", target: "border" },
   { label: "Kustomisasi Profil", kind: "edit", target: "profile" },
   { label: "Kustomisasi Nama", kind: "edit", target: "name" },
+  { label: "Kustomisasi Skin", kind: "edit", target: "skin" },
 ];
 
 function resolveRank(points: number): RankKey {
@@ -369,6 +370,8 @@ function EditorModal({
   tags,
   website,
   selectedBorder,
+  selectedSkin,
+  customSkinColors,
   bannerPreviewUrl,
   onClose,
   onApply,
@@ -385,6 +388,8 @@ function EditorModal({
   tags: string[];
   website: string;
   selectedBorder: BorderKey;
+  selectedSkin: SkinKey;
+  customSkinColors: string[];
   bannerPreviewUrl?: string | null;
   onClose: () => void;
   onApply: (next: {
@@ -399,6 +404,8 @@ function EditorModal({
     tags?: string[];
     website?: string;
     border?: BorderKey;
+    skin?: SkinKey;
+    customSkinColors?: string[];
     bannerFile?: File | null;
   }) => void;
 }) {
@@ -414,7 +421,9 @@ function EditorModal({
   const [draftTags, setDraftTags] = useState(tags);
   const [nextTag, setNextTag] = useState("");
   const [draftBorder, setDraftBorder] = useState<BorderKey>(selectedBorder);
-  const draftBannerFileRef = useRef<File | null>(null); // always holds the latest value, safe to read in async closures
+  const [draftSkin, setDraftSkin] = useState<SkinKey>(selectedSkin);
+  const [draftCustomSkinColors, setDraftCustomSkinColors] = useState<string[]>(customSkinColors);
+  const draftBannerFileRef = useRef<File | null>(null);
   const [draftBannerObjectUrl, setDraftBannerObjectUrl] = useState<string | null>(null);
   const [cropTargetUrl, setCropTargetUrl] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{
@@ -426,7 +435,7 @@ function EditorModal({
   const previewTheme = borderThemes[draftBorder];
 
   const title =
-    mode === "border" ? "Kustomisasi Border" : mode === "profile" ? "Kustomisasi Profil" : "Kustomisasi Nama";
+    mode === "border" ? "Kustomisasi Border" : mode === "profile" ? "Kustomisasi Profil" : mode === "skin" ? "Kustomisasi Skin" : "Kustomisasi Nama";
 
   // No re-encoding needed — videos are stored and played as-is (original quality / fps).
   // Crop is applied via CSS transforms at display time.
@@ -900,6 +909,101 @@ function EditorModal({
               })}
             </div>
           ) : null}
+
+          {mode === "skin" ? (
+            <div className="grid gap-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-black/40 sm:text-xs mb-3">Pilih Preset Skin</p>
+                <div className="grid gap-3">
+                  {(["none", "sunset", "neon", "ocean", "emerald", "cosmic"] as SkinKey[]).map((skin) => {
+                    const theme = skinThemes[skin];
+                    const active = draftSkin === skin;
+
+                    return (
+                      <button
+                        key={skin}
+                        type="button"
+                        onClick={() => {
+                          setDraftSkin(skin);
+                          setDraftCustomSkinColors(theme.colors);
+                        }}
+                        className={`flex items-center gap-4 rounded-2xl border px-4 py-4 text-left transition ${
+                          active
+                            ? "border-black/30 bg-black/[0.04]"
+                            : "border-black/10 bg-white hover:border-black/20 hover:bg-black/[0.02]"
+                        }`}
+                      >
+                        <div className="flex gap-2 shrink-0">
+                          {theme.colors.map((color, idx) => (
+                            <div
+                              key={idx}
+                              className="h-8 w-8 rounded-lg border border-black/10"
+                              style={{ backgroundColor: color }}
+                            />
+                          ))}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-4">
+                            <p className="font-semibold text-black">{theme.label}</p>
+                            <span className="text-[10px] uppercase tracking-[0.35em] text-black/35">
+                              {active ? "Active" : "Select"}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs leading-5 text-black/50">{theme.description}</p>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-black/8">
+                <p className="text-[10px] uppercase tracking-[0.3em] text-black/40 sm:text-xs mb-3">Custom Warna Gradient</p>
+                <div className="grid gap-3">
+                  {draftCustomSkinColors.map((color, idx) => (
+                    <label key={idx} className="grid gap-2">
+                      <span className="text-[10px] uppercase tracking-[0.3em] text-black/40">Warna {idx + 1}</span>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="color"
+                          value={color}
+                          onChange={(e) => {
+                            const newColors = [...draftCustomSkinColors];
+                            newColors[idx] = e.target.value;
+                            setDraftCustomSkinColors(newColors);
+                          }}
+                          className="h-12 w-16 rounded-xl border border-black/10 cursor-pointer"
+                        />
+                        <input
+                          type="text"
+                          value={color}
+                          onChange={(e) => {
+                            const newColors = [...draftCustomSkinColors];
+                            newColors[idx] = e.target.value;
+                            setDraftCustomSkinColors(newColors);
+                          }}
+                          className="h-11 flex-1 rounded-2xl border border-black/10 bg-white px-4 text-sm text-black outline-none transition placeholder:text-black/25 focus:border-black/30"
+                          placeholder="#000000"
+                        />
+                      </div>
+                    </label>
+                  ))}
+                </div>
+
+                <div className="mt-4 rounded-[22px] border border-black/8 bg-black/[0.03] p-3">
+                  <p className="text-[10px] uppercase tracking-[0.32em] text-black/35 mb-2 sm:text-[11px]">Preview</p>
+                  <GradientText
+                    colors={draftCustomSkinColors}
+                    direction="horizontal"
+                    animationSpeed={8}
+                    className="w-full py-3 text-lg"
+                  >
+                    Preview Gradient Text
+                  </GradientText>
+                </div>
+              </div>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
@@ -928,7 +1032,9 @@ function EditorModal({
                             website: draftWebsite,
                             bannerFile: draftBannerKind === "video" ? draftBannerFileRef.current : null,
                           }
-                        : { border: draftBorder },
+                        : mode === "border"
+                          ? { border: draftBorder }
+                          : { skin: draftSkin, customSkinColors: draftCustomSkinColors },
                   );
                   onClose();
                 }}
@@ -969,6 +1075,8 @@ export default function ProfilePage() {
   const [userLocation, setUserLocation] = useState("");
   const [website, setWebsite] = useState("");
   const [socialCounts, setSocialCounts] = useState({ following: 0, followers: 0, friends: 0 });
+  const [selectedSkin, setSelectedSkin] = useState<SkinKey>("none");
+  const [customSkinColors, setCustomSkinColors] = useState<string[]>(["#000000", "#000000"]);
 
   const currentRank = rankKey || resolveRank(rankedPoints);
   const rankTheme = rankThemes[currentRank];
@@ -1073,6 +1181,12 @@ export default function ProfilePage() {
       if (remote.border && ["none", "legend", "mythic", "apex"].includes(remote.border)) {
         setSelectedBorder(remote.border);
       }
+      if (remote.selectedSkin && ["none", "sunset", "neon", "ocean", "emerald", "cosmic"].includes(remote.selectedSkin)) {
+        setSelectedSkin(remote.selectedSkin);
+      }
+      if (Array.isArray(remote.customSkinColors) && remote.customSkinColors.every((c): c is string => typeof c === "string")) {
+        setCustomSkinColors(remote.customSkinColors);
+      }
       if (Array.isArray(remote.tags)) {
         const rawTags = remote.tags.filter((item): item is string => typeof item === "string");
         const webTag = rawTags.find((t) => t.startsWith("web:"));
@@ -1160,16 +1274,18 @@ export default function ProfilePage() {
       if (website) {
         finalTags.push(`web:${website}`);
       }
-      void saveSupabaseProfileSnapshot({ 
-        displayName, 
-        username, 
-        bio, 
-        avatarSrc, 
-        bannerSrc, 
-        bannerKind, 
-        bannerFocus, 
-        bannerCrop, 
-        border: selectedBorder, 
+      void saveSupabaseProfileSnapshot({
+        displayName,
+        username,
+        bio,
+        avatarSrc,
+        bannerSrc,
+        bannerKind,
+        bannerFocus,
+        bannerCrop,
+        border: selectedBorder,
+        selectedSkin,
+        customSkinColors,
         tags: finalTags,
         rankKey,
         rankedPoints,
@@ -1180,7 +1296,7 @@ export default function ProfilePage() {
     } catch { 
       // ignore storage quota issues so profile edits don't break 
     } 
-  }, [avatarSrc, bannerCrop, bannerFocus, bannerKind, bannerSrc, bio, displayName, highestRank, loaded, rankKey, rankedPoints, selectedBorder, tags, website, totalMatch, username, winRate]); 
+  }, [avatarSrc, bannerCrop, bannerFocus, bannerKind, bannerSrc, bio, customSkinColors, displayName, highestRank, loaded, rankKey, rankedPoints, selectedBorder, selectedSkin, tags, website, totalMatch, username, winRate]); 
 
   useEffect(() => {
     return () => {
@@ -1411,9 +1527,23 @@ export default function ProfilePage() {
             <div className="mt-2 space-y-3">
               <div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="font-display text-2xl sm:text-3xl uppercase tracking-wider text-black">
-                    {displayName}
-                  </h2>
+                  {selectedSkin !== "none" ? (
+                    <GradientText
+                      colors={customSkinColors}
+                      direction="horizontal"
+                      animationSpeed={1}
+                      pauseOnHover={false}
+                      yoyo={false}
+                      minimal
+                      className="font-display text-2xl sm:text-3xl uppercase tracking-wider"
+                    >
+                      {displayName}
+                    </GradientText>
+                  ) : (
+                    <h2 className="font-display text-2xl sm:text-3xl uppercase tracking-wider text-black">
+                      {displayName}
+                    </h2>
+                  )}
                   <RankBadge rank={currentRank} />
                 </div>
                 <p className="text-sm text-zinc-400 font-normal">@{username}</p>
@@ -1870,6 +2000,8 @@ export default function ProfilePage() {
             tags={tags}
             website={website}
             selectedBorder={selectedBorder}
+            selectedSkin={selectedSkin}
+            customSkinColors={customSkinColors}
             bannerPreviewUrl={bannerPreviewUrl}
             onClose={() => setEditorMode(null)}
             onApply={async (next) => {
@@ -1886,8 +2018,9 @@ export default function ProfilePage() {
                     setBannerPreviewUrl(previewUrl);
                     setBannerSrc(getProfileBannerVideoKey());
                     setBannerKind("video");
-                  } catch {
-                    // Keep the profile usable even if IndexedDB is not available.
+                  } catch (error) {
+                    console.error("Failed to save video banner:", error);
+                    alert(`Gagal menyimpan video: ${error instanceof Error ? error.message : "Unknown error"}`);
                   }
                 } else {
                   setBannerKind("video");
@@ -1904,6 +2037,8 @@ export default function ProfilePage() {
               if (Array.isArray(next.tags)) setTags(next.tags);
               if (typeof next.website === "string") setWebsite(next.website);
               if (next.border) setSelectedBorder(next.border);
+              if (next.skin) setSelectedSkin(next.skin);
+              if (Array.isArray(next.customSkinColors)) setCustomSkinColors(next.customSkinColors);
             }}
           />
         ) : null}

@@ -6,6 +6,7 @@ import type { TokenShopItem } from "@/lib/dba-token";
 import type { SitePreferences } from "@/lib/site-preferences";
 
 export type ProfileBorderKey = "none" | "legend" | "mythic" | "apex";
+export type ProfileSkinKey = "none" | "sunset" | "neon" | "ocean" | "emerald" | "cosmic";
 export type ProfileBannerKind = "image" | "video";
 export type ProfileRankKey = "Recruit" | "Challenger" | "Vanguard" | "Legend" | "Mythic" | "Apex";
 
@@ -15,17 +16,19 @@ export type BannerCrop = {
   zoom: number;
 };
 
-export type ProfileSnapshot = { 
-  email?: string; 
-  displayName: string; 
-  username: string; 
-  bio: string; 
-  avatarSrc: string; 
+export type ProfileSnapshot = {
+  email?: string;
+  displayName: string;
+  username: string;
+  bio: string;
+  avatarSrc: string;
   bannerSrc: string;
   bannerKind: ProfileBannerKind;
   bannerFocus: number;
   bannerCrop?: BannerCrop | null;
   border: ProfileBorderKey;
+  selectedSkin?: ProfileSkinKey;
+  customSkinColors?: string[];
   tags: string[];
   rankKey?: ProfileRankKey;
   rankedPoints?: number;
