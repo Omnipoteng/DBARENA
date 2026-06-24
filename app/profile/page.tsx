@@ -2,10 +2,11 @@
 
 import Image from "next/image";
 import Link from "next/link"; 
-import { useEffect, useRef, useState, type ChangeEvent } from "react"; 
-import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState, type ChangeEvent, Suspense } from "react"; 
+import { useRouter, useSearchParams } from "next/navigation";
 import ElectricBorder from "@/components/ElectricBorder"; 
 import ImageCropper from "@/components/ImageCropper"; 
+import GradientText from "@/components/gradient-text";
 import {
   getProfileBannerVideoKey,
   loadProfileBannerVideo,
@@ -18,13 +19,54 @@ import {
   loadSupabaseOnboardingPreferences,
   loadSupabaseProfileSnapshot,
   loadSupabaseRankedMatches,
+  loadSupabaseSocialCounts,
   saveSupabaseProfileSnapshot,
 } from "@/lib/supabase-store";
 
 type BorderKey = "none" | "legend" | "mythic" | "apex";
 type RankKey = "Recruit" | "Challenger" | "Vanguard" | "Legend" | "Mythic" | "Apex";
-type EditorMode = "name" | "profile" | "border";
+type EditorMode = "name" | "profile" | "border" | "skin";
+type SkinKey = "none" | "sunset" | "neon" | "ocean" | "emerald" | "cosmic";
 type AccessState = "loading" | "guest" | "onboarding" | "ready";
+
+type SkinTheme = {
+  label: string;
+  description: string;
+  colors: string[];
+};
+
+const skinThemes: Record<SkinKey, SkinTheme> = {
+  none: {
+    label: "No Skin",
+    description: "Standard solid color name text.",
+    colors: ["#000000", "#000000"],
+  },
+  sunset: {
+    label: "Sunset Glow",
+    description: "Warm gradient inspired by sunset hues.",
+    colors: ["#ff7e5f", "#feb47b", "#ff7e5f"],
+  },
+  neon: {
+    label: "Neon Dreams",
+    description: "Vibrant electric pink, violet, and purple.",
+    colors: ["#5227FF", "#FF9FFC", "#B497CF"],
+  },
+  ocean: {
+    label: "Ocean Breeze",
+    description: "Deep sea cyan and electric blue.",
+    colors: ["#00c6ff", "#0072ff", "#00c6ff"],
+  },
+  emerald: {
+    label: "Emerald Rush",
+    description: "Rich mint and bright emerald green.",
+    colors: ["#11998e", "#38ef7d", "#11998e"],
+  },
+  cosmic: {
+    label: "Cosmic Flare",
+    description: "Fiery orange, scarlet, and magenta.",
+    colors: ["#833ab4", "#fd1d1d", "#fcb045"],
+  },
+};
 
 type BorderTheme = {
   label: string;
@@ -926,6 +968,7 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<"activity" | "debates" | "achievements" | "inventory" | "perks">("activity");
   const [userLocation, setUserLocation] = useState("");
   const [website, setWebsite] = useState("");
+  const [socialCounts, setSocialCounts] = useState({ following: 0, followers: 0, friends: 0 });
 
   const currentRank = rankKey || resolveRank(rankedPoints);
   const rankTheme = rankThemes[currentRank];
@@ -1089,6 +1132,11 @@ export default function ProfilePage() {
             image: match.image || "/images/1.jpg",
           })),
         );
+      }
+
+      const social = await loadSupabaseSocialCounts();
+      if (!cancelled && social) {
+        setSocialCounts(social);
       }
 
       if (!cancelled) {
@@ -1426,15 +1474,15 @@ export default function ProfilePage() {
               {/* Profile stats inline (Followers, Following, Friends, Debates, Wins, Losses, Tokens) */}
               <div className="flex flex-wrap items-center gap-x-5 gap-y-2 pt-2 text-xs sm:text-sm text-zinc-600 font-normal">
                 <span className="flex gap-1">
-                  <strong className="font-semibold text-black">186</strong>
+                  <strong className="font-semibold text-black">{socialCounts.following}</strong>
                   <span className="text-zinc-500">Following</span>
                 </span>
                 <span className="flex gap-1">
-                  <strong className="font-semibold text-black">1.2K</strong>
+                  <strong className="font-semibold text-black">{socialCounts.followers}</strong>
                   <span className="text-zinc-500">Followers</span>
                 </span>
                 <span className="flex gap-1">
-                  <strong className="font-semibold text-black">45</strong>
+                  <strong className="font-semibold text-black">{socialCounts.friends}</strong>
                   <span className="text-zinc-500">Friends</span>
                 </span>
                 <span className="flex gap-1">

@@ -208,22 +208,22 @@ export default function ImageCropper({
   return (
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/90 p-4 select-none backdrop-blur-md"
+      className="fixed inset-0 z-[60] flex flex-col items-center justify-center bg-black/85 p-4 select-none backdrop-blur-sm"
     >
-      <div className="relative w-full max-w-2xl overflow-hidden rounded-[28px] border border-white/10 bg-zinc-950 p-5 shadow-[0_24px_80px_rgba(0,0,0,0.5)] sm:p-6">
+      <div className="relative w-full max-w-2xl overflow-hidden border border-white/20 bg-zinc-950 p-6 shadow-[0_20px_50px_rgba(0,0,0,0.6)] sm:p-8 rounded-none">
         
         {/* Header */}
         <div className="flex items-center justify-between border-b border-white/10 pb-4">
           <div>
-            <span className="text-[10px] font-semibold uppercase tracking-[0.3em] text-white/40">Adjust banner</span>
-            <h4 className="mt-1 font-display text-xl uppercase tracking-[0.05em] text-white sm:text-2xl">
+            <span className="text-[10px] font-bold uppercase tracking-[0.3em] text-white/40">Adjust banner</span>
+            <h4 className="mt-1.5 font-display text-lg uppercase tracking-[0.05em] text-white sm:text-xl font-bold">
               Sesuaikan Area Banner ({mediaType === "video" ? "Video" : "Gambar"})
             </h4>
           </div>
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-full bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-white/15"
+            className="border border-white/20 bg-transparent px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-white/70 transition-colors hover:text-white hover:border-white rounded-none"
           >
             Batal
           </button>
@@ -238,7 +238,7 @@ export default function ImageCropper({
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerUp}
             onWheel={handleWheel}
-            className="relative w-full aspect-[4/1] overflow-hidden rounded-2xl bg-zinc-900 border border-white/5 cursor-move touch-none"
+            className="relative w-full aspect-[4/1] overflow-hidden bg-zinc-900 border border-white/10 cursor-move touch-none rounded-none"
           >
             {/* Draggable Media */}
             {mediaType === "video" ? (
@@ -265,22 +265,22 @@ export default function ImageCropper({
             )}
 
             {/* Grid Overlay lines (fade in on drag) */}
-            <div className={`absolute inset-0 pointer-events-none border-2 border-white/40 transition-opacity duration-300 ${isDragging ? "opacity-100" : "opacity-30"}`}>
+            <div className={`absolute inset-0 pointer-events-none border border-white/25 transition-opacity duration-300 ${isDragging ? "opacity-100" : "opacity-30"}`}>
               {/* Vertical line 1 */}
-              <div className="absolute left-1/3 top-0 bottom-0 w-[1px] bg-white/20" />
+              <div className="absolute left-1/3 top-0 bottom-0 w-[1px] bg-white/15" />
               {/* Vertical line 2 */}
-              <div className="absolute left-2/3 top-0 bottom-0 w-[1px] bg-white/20" />
+              <div className="absolute left-2/3 top-0 bottom-0 w-[1px] bg-white/15" />
               {/* Horizontal line 1 */}
-              <div className="absolute top-1/3 left-0 right-0 h-[1px] bg-white/20" />
+              <div className="absolute top-1/3 left-0 right-0 h-[1px] bg-white/15" />
               {/* Horizontal line 2 */}
-              <div className="absolute top-2/3 left-0 right-0 h-[1px] bg-white/20" />
+              <div className="absolute top-2/3 left-0 right-0 h-[1px] bg-white/15" />
             </div>
 
             {/* Banner shape outline */}
-            <div className="absolute inset-0 pointer-events-none ring-1 ring-inset ring-white/15 rounded-2xl" />
+            <div className="absolute inset-0 pointer-events-none ring-1 ring-inset ring-white/10 rounded-none" />
           </div>
 
-          <p className="mt-3 text-[10px] text-center uppercase tracking-[0.25em] text-white/40">
+          <p className="mt-3 text-[9px] text-center uppercase tracking-[0.25em] text-white/40">
             Geser media untuk memposisikan • Gunakan scroll/pinch untuk zoom
           </p>
 
@@ -304,7 +304,7 @@ export default function ImageCropper({
                 setX(prevX => Math.max(-limitX, Math.min(limitX, prevX)));
                 setY(prevY => Math.max(-limitY, Math.min(limitY, prevY)));
               }}
-              className="h-1 flex-1 cursor-pointer appearance-none rounded-lg bg-white/10 accent-white outline-none"
+              className="h-1 flex-1 cursor-pointer appearance-none bg-white/10 accent-white outline-none rounded-none"
               style={{
                 background: `linear-gradient(to right, #ffffff 0%, #ffffff ${((scale - 1) / 4) * 100}%, rgba(255,255,255,0.1) ${((scale - 1) / 4) * 100}%, rgba(255,255,255,0.1) 100%)`
               }}
@@ -315,11 +315,11 @@ export default function ImageCropper({
         </div>
 
         {/* Footer actions */}
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+        <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:justify-end border-t border-white/10 pt-5">
           <button
             type="button"
             onClick={onCancel}
-            className="flex h-11 items-center justify-center rounded-2xl border border-white/10 bg-transparent px-6 text-sm font-semibold text-white/70 transition hover:bg-white/5"
+            className="flex h-11 items-center justify-center border border-white/20 bg-transparent px-6 text-[10px] font-bold uppercase tracking-widest text-white/70 transition hover:bg-white/5 hover:text-white rounded-none"
           >
             Batal
           </button>
@@ -327,7 +327,7 @@ export default function ImageCropper({
             type="button"
             disabled={!isLoaded}
             onClick={handleSave}
-            className="flex h-11 items-center justify-center rounded-2xl bg-white px-6 text-sm font-bold text-black transition hover:bg-white/90 disabled:opacity-50"
+            className="flex h-11 items-center justify-center border border-white bg-white px-6 text-[10px] font-bold uppercase tracking-widest text-black transition hover:bg-transparent hover:text-white disabled:opacity-40 rounded-none"
           >
             Simpan Crop
           </button>
