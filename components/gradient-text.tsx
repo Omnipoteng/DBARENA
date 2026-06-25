@@ -12,6 +12,7 @@ interface GradientTextProps {
   direction?: 'horizontal' | 'vertical' | 'diagonal';
   pauseOnHover?: boolean;
   yoyo?: boolean;
+  minimal?: boolean;
 }
 
 export default function GradientText({
@@ -22,7 +23,8 @@ export default function GradientText({
   showBorder = false,
   direction = 'horizontal',
   pauseOnHover = false,
-  yoyo = true
+  yoyo = true,
+  minimal = false
 }: GradientTextProps) {
   const [isPaused, setIsPaused] = useState(false);
   const progress = useMotionValue(0);
@@ -95,6 +97,19 @@ export default function GradientText({
     backgroundSize: direction === 'horizontal' ? '300% 100%' : direction === 'vertical' ? '100% 300%' : '300% 300%',
     backgroundRepeat: 'repeat'
   };
+
+  if (minimal) {
+    return (
+      <motion.span
+        className={`text-transparent bg-clip-text ${className}`}
+        style={{ ...gradientStyle, backgroundPosition, WebkitBackgroundClip: 'text' }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        {children}
+      </motion.span>
+    );
+  }
 
   return (
     <motion.div

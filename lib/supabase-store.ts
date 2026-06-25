@@ -6,6 +6,7 @@ import type { TokenShopItem } from "@/lib/dba-token";
 import type { SitePreferences } from "@/lib/site-preferences";
 
 export type ProfileBorderKey = "none" | "legend" | "mythic" | "apex";
+export type ProfileSkinKey = "none" | "sunset" | "neon" | "ocean" | "emerald" | "cosmic";
 export type ProfileBannerKind = "image" | "video";
 export type ProfileRankKey = "Recruit" | "Challenger" | "Vanguard" | "Legend" | "Mythic" | "Apex";
 
@@ -15,17 +16,19 @@ export type BannerCrop = {
   zoom: number;
 };
 
-export type ProfileSnapshot = { 
-  email?: string; 
-  displayName: string; 
-  username: string; 
-  bio: string; 
-  avatarSrc: string; 
+export type ProfileSnapshot = {
+  email?: string;
+  displayName: string;
+  username: string;
+  bio: string;
+  avatarSrc: string;
   bannerSrc: string;
   bannerKind: ProfileBannerKind;
   bannerFocus: number;
   bannerCrop?: BannerCrop | null;
   border: ProfileBorderKey;
+  selectedSkin?: ProfileSkinKey;
+  customSkinColors?: string[];
   tags: string[];
   rankKey?: ProfileRankKey;
   rankedPoints?: number;
@@ -88,11 +91,11 @@ function normalizeUniqueStringArray(value: unknown) {
   return Array.from(new Set(normalizeStringArray(value).map((item) => item.trim()).filter(Boolean)));
 }
 
-export async function loadSupabaseProfileSnapshot() {
+export async function loadSupabaseProfileSnapshot(customUserKey?: string) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return null;
 
-  const userKey = getDbaUserKey();
+  const userKey = customUserKey || getDbaUserKey();
 
   const { data: profileRow, error: profileError } = await supabase
     .from("profiles")
@@ -581,6 +584,45 @@ export async function setSupabaseFollowState(targetUserKey: string, following: b
     .delete()
     .eq("follower_user_key", userKey)
     .eq("following_user_key", targetUserKey);
+}
+
+export async function loadSupabaseSocialCounts(customUserKey?: string): Promise<{
+  following: number;
+  followers: number;
+  friends: number;
+}> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return { following: 0, followers: 0, friends: 0 };
+
+  const userKey = customUserKey || getDbaUserKey();
+
+  const { data: followRows } = await supabase
+    .from("follows")
+    .select("follower_user_key,following_user_key")
+    .or(`follower_user_key.eq.${userKey},following_user_key.eq.${userKey}`);
+
+  const followingSet = new Set(
+    (followRows ?? [])
+      .filter((row) => row.follower_user_key === userKey)
+      .map((row) => row.following_user_key as string),
+  );
+  const followersSet = new Set(
+    (followRows ?? [])
+      .filter((row) => row.following_user_key === userKey)
+      .map((row) => row.follower_user_key as string),
+  );
+
+  // Friends = mutual follows
+  let friends = 0;
+  for (const key of followingSet) {
+    if (followersSet.has(key)) friends++;
+  }
+
+  return {
+    following: followingSet.size,
+    followers: followersSet.size,
+    friends,
+  };
 }
 
 export async function loadSupabaseInventoryItems(fallbackItems: TokenShopItem[]) { 
