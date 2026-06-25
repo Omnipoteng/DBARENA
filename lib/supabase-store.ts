@@ -128,6 +128,47 @@ export async function loadSupabaseProfileSnapshot() {
   } satisfies ProfileSnapshot;
 }
 
+export async function loadSupabaseProfileSnapshotByKey(userKey: string) {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return null;
+
+  const cleanedKey = userKey.trim();
+  if (!cleanedKey) return null;
+
+  const { data: profileRow, error: profileError } = await supabase
+    .from("profiles")
+    .select("*")
+    .eq("user_key", cleanedKey)
+    .maybeSingle();
+
+  if (profileError || !profileRow) return null;
+
+  const { data: tagsRows } = await supabase
+    .from("profile_tags")
+    .select("label, position")
+    .eq("profile_user_key", cleanedKey)
+    .order("position", { ascending: true });
+
+  return {
+    email: typeof profileRow.email === "string" ? profileRow.email : "",
+    displayName: profileRow.display_name ?? "",
+    username: profileRow.username ?? "",
+    bio: profileRow.bio ?? "",
+    avatarSrc: profileRow.avatar_url ?? "",
+    bannerSrc: profileRow.banner_url ?? "",
+    bannerKind: (profileRow.banner_kind as ProfileBannerKind) ?? "image",
+    bannerFocus: typeof profileRow.banner_focus === "number" ? profileRow.banner_focus : 50,
+    bannerCrop: profileRow.banner_crop ?? null,
+    border: (profileRow.border_key as ProfileBorderKey) ?? "legend",
+    tags: normalizeStringArray(tagsRows?.map((item) => item.label)),
+    rankKey: (profileRow.rank_key as ProfileRankKey) ?? "Legend",
+    rankedPoints: typeof profileRow.ranked_points === "number" ? profileRow.ranked_points : 0,
+    highestRank: (profileRow.highest_rank as ProfileRankKey | string) ?? "Mythic",
+    totalMatch: typeof profileRow.total_match === "number" ? profileRow.total_match : 0,
+    winRate: typeof profileRow.win_rate === "number" ? profileRow.win_rate : 0,
+  } satisfies ProfileSnapshot;
+}
+
 export async function saveSupabaseProfileSnapshot(snapshot: ProfileSnapshot) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return;
@@ -386,6 +427,34 @@ export async function loadSupabaseRankedMatches(fallbackMatches: RankedMatchSnap
   })) satisfies RankedMatchSnapshot[];
 }
 
+export async function loadSupabaseRankedMatchesByUserKey(userKey: string) {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return [];
+
+  const cleanedKey = userKey.trim();
+  if (!cleanedKey) return [];
+
+  const { data, error } = await supabase
+    .from("ranked_matches")
+    .select("id,opponent,platform,result,delta,from_rank,to_rank,match_date,preview_image_url")
+    .eq("user_key", cleanedKey)
+    .order("match_date", { ascending: false });
+
+  if (error || !data) return [];
+
+  return data.map((match) => ({
+    id: String(match.id),
+    opponent: String(match.opponent),
+    platform: String(match.platform),
+    result: (match.result as RankedMatchSnapshot["result"]) ?? "Win",
+    delta: Number(match.delta ?? 0),
+    fromRank: (match.from_rank as ProfileRankKey) ?? "Vanguard",
+    toRank: (match.to_rank as ProfileRankKey) ?? "Legend",
+    date: String(match.match_date),
+    image: String(match.preview_image_url ?? ""),
+  })) satisfies RankedMatchSnapshot[];
+}
+
 export async function saveSupabasePosts(posts: Post[]) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return;
@@ -406,9 +475,9 @@ export async function saveSupabasePosts(posts: Post[]) {
   );
 }
 
-export async function loadSupabaseFriends(fallbackProfiles: SocialProfile[]) {
+export async function loadSupabaseFriends() {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return fallbackProfiles;
+  if (!supabase) return [];
 
   const userKey = getDbaUserKey();
 
@@ -417,24 +486,8 @@ export async function loadSupabaseFriends(fallbackProfiles: SocialProfile[]) {
     .select("user_key,display_name,username,avatar_url,banner_url,bio,is_public")
     .eq("is_public", true);
 
-  if (profileError) return fallbackProfiles;
-
-  if (!profileRows || profileRows.length === 0) {
-    await supabase.from("profiles").upsert(
-      fallbackProfiles.map((profile) => ({
-        user_key: profile.id,
-        display_name: profile.name,
-        username: profile.username,
-        avatar_url: profile.avatar,
-        banner_url: profile.banner,
-        bio: profile.bio,
-        is_public: true,
-      })),
-      { onConflict: "user_key" },
-    );
-
-    return fallbackProfiles;
-  }
+  if (profileError) return [];
+  if (!profileRows || profileRows.length === 0) return [];
 
   const { data: followRows } = await supabase
     .from("follows")
@@ -464,6 +517,46 @@ export async function loadSupabaseFriends(fallbackProfiles: SocialProfile[]) {
       following: followingSet.has(String(profile.user_key)),
       followsMe: followersSet.has(String(profile.user_key)),
     })) satisfies SocialProfile[];
+}
+
+export async function loadSupabaseFriendCountsByUserKey(userKey: string) {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) {
+    return { followers: 0, following: 0, friends: 0 };
+  }
+
+  const cleanedKey = userKey.trim();
+  if (!cleanedKey) {
+    return { followers: 0, following: 0, friends: 0 };
+  }
+
+  const [{ count: followingCount }, { count: followersCount }, { data: followRows }] = await Promise.all([
+    supabase.from("follows").select("follower_user_key", { count: "exact", head: true }).eq("follower_user_key", cleanedKey),
+    supabase.from("follows").select("following_user_key", { count: "exact", head: true }).eq("following_user_key", cleanedKey),
+    supabase
+      .from("follows")
+      .select("follower_user_key,following_user_key")
+      .or(`follower_user_key.eq.${cleanedKey},following_user_key.eq.${cleanedKey}`),
+  ]);
+
+  const followingSet = new Set(
+    (followRows ?? [])
+      .filter((row) => row.follower_user_key === cleanedKey)
+      .map((row) => row.following_user_key as string),
+  );
+  const followersSet = new Set(
+    (followRows ?? [])
+      .filter((row) => row.following_user_key === cleanedKey)
+      .map((row) => row.follower_user_key as string),
+  );
+
+  const friends = Array.from(followingSet).filter((item) => followersSet.has(item)).length;
+
+  return {
+    followers: followersCount ?? 0,
+    following: followingCount ?? 0,
+    friends,
+  };
 }
 
 export async function setSupabaseFollowState(targetUserKey: string, following: boolean) {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 
 import { 
   applySitePreferences, 
@@ -15,6 +16,7 @@ import {
   loadSupabaseSitePreferences, 
   saveSupabaseSitePreferences, 
 } from "@/lib/supabase-store";
+import { logoutCurrentUser } from "@/lib/auth-session";
 import Navbar from "@/components/sections/navbar"; 
 
 const SITE_PREFERENCES_EVENT = "site-preferences-change";
@@ -137,6 +139,7 @@ function SectionBlock({
 }
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [preferences, setPreferences] = useState<SitePreferences>(getDefaultPreferences());
 
   useEffect(() => { 
@@ -171,6 +174,12 @@ export default function SettingsPage() {
 
   const resetPreferences = () => {
     savePreferences(getDefaultPreferences());
+  };
+
+  const handleLogout = async () => {
+    await logoutCurrentUser();
+    router.replace("/login");
+    router.refresh();
   };
 
   return (
@@ -409,6 +418,18 @@ export default function SettingsPage() {
               className="inline-flex h-12 flex-1 items-center justify-center rounded-full bg-black px-5 text-sm font-semibold text-white transition hover:opacity-90"
             >
               Kembali ke default
+            </button>
+          </div>
+
+          <div className="mt-5 border-t border-black/8 pt-5">
+            <button
+              type="button"
+              onClick={() => {
+                void handleLogout();
+              }}
+              className="inline-flex h-12 w-full items-center justify-center border border-black/10 bg-white px-5 text-sm font-semibold text-black transition hover:bg-black/[0.03]"
+            >
+              Logout
             </button>
           </div>
         </div>

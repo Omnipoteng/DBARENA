@@ -17,6 +17,7 @@ import { getSupabaseAuthClient } from "@/lib/supabase-auth";
 import {
   loadSupabaseOnboardingPreferences,
   loadSupabaseProfileSnapshot,
+  loadSupabaseProfileSnapshotByKey,
   loadSupabaseRankedMatches,
   saveSupabaseProfileSnapshot,
 } from "@/lib/supabase-store";
@@ -946,8 +947,7 @@ export default function ProfilePage() {
       const supabase = getSupabaseAuthClient();
       if (!supabase) {
         if (!cancelled) {
-          setAccessState("guest");
-          setLoaded(true);
+          router.replace("/login");
         }
         return;
       }
@@ -956,15 +956,14 @@ export default function ProfilePage() {
       const user = data.session?.user;
       if (!user) {
         if (!cancelled) {
-          setAccessState("guest");
-          setLoaded(true);
+          router.replace("/login");
         }
         return;
       }
 
       setDbaUserKey(user.id);
 
-      const remote = await loadSupabaseProfileSnapshot();
+      const remote = await loadSupabaseProfileSnapshotByKey(user.id);
       if (!remote) {
         const fallbackDisplayName = (user.user_metadata?.display_name as string | undefined)?.trim() || "Member";
         const fallbackUsername = (user.user_metadata?.username as string | undefined)?.replace(/^@/, "").trim() || "member";

@@ -2,7 +2,9 @@
 
 import Link from "next/link"; 
 import { useEffect, useState, useRef, type ReactNode } from "react"; 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+
+import { logoutCurrentUser } from "@/lib/auth-session";
 
 const navItems = [
   {
@@ -319,6 +321,26 @@ const drawerItems: DrawerItem[] = [
       </>
     ),
   },
+  {
+    kind: "action",
+    label: "Logout",
+    icon: (
+      <>
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M10 7V5a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6a2 2 0 0 1-2-2v-2"
+        />
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M14 12H4m0 0 3-3m-3 3 3 3"
+        />
+      </>
+    ),
+  },
 ];
 
 export default function Navbar() {
@@ -331,6 +353,7 @@ export default function Navbar() {
     return localStorage.getItem("sidebar-collapsed") === "true"; 
   }); 
   const pathname = usePathname();
+  const router = useRouter();
 
   // Floating mobile bubble gesture state
   const [bubbleX, setBubbleX] = useState(16);
@@ -529,6 +552,13 @@ export default function Navbar() {
     setIsOpen(false);
   };
 
+  const handleLogout = async () => {
+    await logoutCurrentUser();
+    setIsOpen(false);
+    router.replace("/login");
+    router.refresh();
+  };
+
   const handleToggleCollapse = (collapsed: boolean) => {
     setIsCollapsed(collapsed);
     localStorage.setItem("sidebar-collapsed", String(collapsed));
@@ -635,7 +665,14 @@ export default function Navbar() {
       const handleActionClick = (e: React.MouseEvent<HTMLButtonElement>) => {
         spawnClickBubbles(item.label, e);
         setTimeout(() => {
-          openDailyLogin();
+          if (item.label === "DBA Token") {
+            openDailyLogin();
+            return;
+          }
+
+          if (item.label === "Logout") {
+            void handleLogout();
+          }
         }, 250);
       };
 

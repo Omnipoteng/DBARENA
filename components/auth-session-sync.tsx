@@ -2,8 +2,9 @@
 
 import { useEffect } from "react";
 
-import { clearDbaUserKey, getDbaUserKey, setDbaUserKey } from "@/lib/dba-user";
-import { clearTokenWallet, writeTokenWallet } from "@/lib/dba-token";
+import { clearLoggedInUserCache } from "@/lib/auth-session";
+import { setDbaUserKey } from "@/lib/dba-user";
+import { writeTokenWallet } from "@/lib/dba-token";
 import { getSupabaseAuthClient } from "@/lib/supabase-auth";
 import { loadSupabaseTokenWallet } from "@/lib/supabase-store";
 
@@ -27,9 +28,7 @@ export default function AuthSessionSync() {
         return;
       }
 
-      clearDbaUserKey();
-      clearTokenWallet();
-      getDbaUserKey();
+      void clearLoggedInUserCache();
     });
 
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -42,9 +41,7 @@ export default function AuthSessionSync() {
         return;
       }
 
-      clearDbaUserKey();
-      clearTokenWallet();
-      getDbaUserKey();
+      void clearLoggedInUserCache();
     });
 
     return () => {

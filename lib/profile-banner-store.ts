@@ -55,3 +55,15 @@ export async function loadProfileBannerVideo() {
 export function getProfileBannerVideoKey() {
   return BANNER_VIDEO_KEY;
 }
+
+export async function clearProfileBannerVideo() {
+  const db = await openDatabase();
+
+  await new Promise<void>((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, "readwrite");
+    const store = transaction.objectStore(STORE_NAME);
+    store.delete(BANNER_VIDEO_KEY);
+    transaction.oncomplete = () => resolve();
+    transaction.onerror = () => reject(transaction.error ?? new Error("Unable to clear banner video."));
+  });
+}
