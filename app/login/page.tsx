@@ -76,7 +76,7 @@ export default function LoginPage() {
   }) => {
     setDbaUserKey(params.userId);
 
-    const existingProfile = await loadSupabaseProfileSnapshot();
+    const existingProfile = await loadSupabaseProfileSnapshot(params.userId);
     if (existingProfile) {
       return;
     }
@@ -101,17 +101,17 @@ export default function LoginPage() {
       winRate: 0,
       border: "none",
       tags: [],
-    });
+    }, params.userId);
 
     await saveSupabaseTokenWallet({
       balance: 0,
       unlocks: [],
       history: [],
-    });
+    }, params.userId);
 
-    await saveSupabaseSitePreferences(getDefaultPreferences());
+    await saveSupabaseSitePreferences(getDefaultPreferences(), params.userId);
 
-    const existingPreferences = await loadSupabaseOnboardingPreferences();
+    const existingPreferences = await loadSupabaseOnboardingPreferences(params.userId);
     if (!existingPreferences) {
       await saveSupabaseOnboardingPreferences({
         interests: [],
@@ -119,7 +119,7 @@ export default function LoginPage() {
         favoriteVerses: [],
         location: "",
         onboardingCompleted: false,
-      });
+      }, params.userId);
     }
   };
 

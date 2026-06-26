@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link"; 
 import { useEffect, useRef, useState, type ChangeEvent, Suspense } from "react"; 
 import { useRouter, useSearchParams } from "next/navigation";
+import type { User } from "@supabase/supabase-js";
 import ElectricBorder from "@/components/ElectricBorder"; 
 import ImageCropper from "@/components/ImageCropper"; 
 import GradientText from "@/components/gradient-text";
@@ -1051,6 +1052,65 @@ function EditorModal({
 
 export default function ProfilePage() {
   const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const supabase = getSupabaseAuthClient();
+    if (!supabase) {
+      router.replace("/login");
+      return;
+    }
+
+    void supabase.auth.getSession().then(({ data }) => {
+      if (cancelled) return;
+      const sessionUser = data.session?.user;
+      if (sessionUser) {
+        setUser(sessionUser);
+        setDbaUserKey(sessionUser.id);
+      } else {
+        router.replace("/login");
+      }
+      setLoading(false);
+    });
+
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (cancelled) return;
+      const sessionUser = session?.user;
+      if (sessionUser) {
+        setUser(sessionUser);
+        setDbaUserKey(sessionUser.id);
+      } else {
+        setUser(null);
+        router.replace("/login");
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      data.subscription.unsubscribe();
+    };
+  }, [router]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#fafaf9] text-black">
+        <Navbar />
+        <main className="mx-auto flex min-h-[calc(100vh-72px)] w-full max-w-7xl items-center justify-center px-4 py-10 sm:px-6 lg:px-8">
+          <p className="text-[13px] font-medium text-black/40">Menyiapkan profile dari Supabase...</p>
+        </main>
+      </div>
+    );
+  }
+
+  if (!user) return null;
+
+  return <ProfileContent key={user.id} user={user} />;
+}
+
+function ProfileContent({ user }: { user: User }) {
+  const router = useRouter();
   const [displayName, setDisplayName] = useState("");
   const [username, setUsername] = useState("");
   const [bio, setBio] = useState("");
@@ -1095,23 +1155,6 @@ export default function ProfilePage() {
     let fallbackFrame = 0;
 
     const hydrateProfile = async () => {
-      const supabase = getSupabaseAuthClient();
-      if (!supabase) {
-        if (!cancelled) {
-          router.replace("/login");
-        }
-        return;
-      }
-
-      const { data } = await supabase.auth.getSession();
-      const user = data.session?.user;
-      if (!user) {
-        if (!cancelled) {
-          router.replace("/login");
-        }
-        return;
-      }
-
       setDbaUserKey(user.id);
 
       const remote = await loadSupabaseProfileSnapshotByKey(user.id);
@@ -1137,7 +1180,7 @@ export default function ProfilePage() {
           winRate: 0,
         };
 
-        await saveSupabaseProfileSnapshot(seededProfile);
+        await saveSupabaseProfileSnapshot(seededProfile, user.id);
 
         if (!cancelled) {
           setDisplayName(seededProfile.displayName);
@@ -1197,7 +1240,7 @@ export default function ProfilePage() {
         setTags(rawTags.filter((t) => !t.startsWith("web:")));
       }
 
-      const preferences = await loadSupabaseOnboardingPreferences();
+      const preferences = await loadSupabaseOnboardingPreferences(user.id);
       if (!cancelled && preferences && preferences.location) {
         setUserLocation(preferences.location);
       } else if (!cancelled) {
@@ -1231,7 +1274,7 @@ export default function ProfilePage() {
         setBannerPreviewUrl(null);
       }
 
-      const matches = await loadSupabaseRankedMatches();
+      const matches = await loadSupabaseRankedMatches([], user.id);
       if (!cancelled) {
         setRecentMatches(
           matches.map((match) => ({
@@ -1247,7 +1290,7 @@ export default function ProfilePage() {
         );
       }
 
-      const social = await loadSupabaseSocialCounts();
+      const social = await loadSupabaseSocialCounts(user.id);
       if (!cancelled && social) {
         setSocialCounts(social);
       }
@@ -1264,7 +1307,7 @@ export default function ProfilePage() {
       cancelled = true;
       window.cancelAnimationFrame(fallbackFrame);
     };
-  }, [router]);
+  }, [router, user.id]);
 
   useEffect(() => {
     if (!loaded) return;
@@ -1291,11 +1334,11 @@ export default function ProfilePage() {
         highestRank,
         totalMatch,
         winRate,
-      }); 
+      }, user.id); 
     } catch { 
       // ignore storage quota issues so profile edits don't break 
     } 
-  }, [avatarSrc, bannerCrop, bannerFocus, bannerKind, bannerSrc, bio, customSkinColors, displayName, highestRank, loaded, rankKey, rankedPoints, selectedBorder, selectedSkin, tags, website, totalMatch, username, winRate]); 
+  }, [avatarSrc, bannerCrop, bannerFocus, bannerKind, bannerSrc, bio, customSkinColors, displayName, highestRank, loaded, rankKey, rankedPoints, selectedBorder, selectedSkin, tags, website, totalMatch, username, winRate, user.id]); 
 
   useEffect(() => {
     return () => {

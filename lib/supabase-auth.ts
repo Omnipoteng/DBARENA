@@ -23,6 +23,11 @@ export function getSupabaseAuthClient() {
   return authClient;
 }
 
+export function resetSupabaseAuthClient() {
+  authClient = null;
+}
+
+
 export async function resolveLoginEmail(identifier: string) {
   const cleaned = identifier.trim();
 

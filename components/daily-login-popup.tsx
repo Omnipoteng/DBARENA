@@ -85,6 +85,7 @@ export default function DailyLoginPopup() {
   const [isOpen, setIsOpen] = useState(false);
   const [authReady, setAuthReady] = useState(false);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
   const [balance, setBalance] = useState(() => readTokenWallet().balance);
   const [claimState, setClaimState] = useState<{ claimDate: string; streakDay: number } | null>(() => readClaimState());
 
@@ -110,16 +111,18 @@ export default function DailyLoginPopup() {
     const applyGuestState = () => {
       if (cancelled) return;
       setIsAuthenticated(false);
+      setUserId(null);
       setAuthReady(true);
       setBalance(readTokenWallet().balance);
       setClaimState(readClaimState());
     };
 
-    const applyAuthenticatedState = async () => {
-      const remoteWallet = await loadSupabaseTokenWallet();
+    const applyAuthenticatedState = async (uid: string) => {
+      const remoteWallet = await loadSupabaseTokenWallet(uid);
       if (cancelled) return;
 
       setIsAuthenticated(true);
+      setUserId(uid);
       setAuthReady(true);
 
       if (remoteWallet) {
@@ -145,7 +148,7 @@ export default function DailyLoginPopup() {
     void supabase.auth.getSession().then(({ data }) => {
       if (cancelled) return;
       if (data.session?.user) {
-        void applyAuthenticatedState();
+        void applyAuthenticatedState(data.session.user.id);
         return;
       }
 
@@ -155,7 +158,7 @@ export default function DailyLoginPopup() {
     const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       if (cancelled) return;
       if (session?.user) {
-        void applyAuthenticatedState();
+        void applyAuthenticatedState(session.user.id);
         return;
       }
 
@@ -231,7 +234,7 @@ export default function DailyLoginPopup() {
       history: wallet.history,
       claimDate: todayKey,
       streakDay: activeDay,
-    });
+    }, userId || undefined);
     void recordSupabaseDailyLoginClaim({
       claimDate: todayKey,
       streakDay: activeDay,
@@ -239,13 +242,13 @@ export default function DailyLoginPopup() {
       rewardType: currentReward.type,
       rewardAmount: currentReward.amount,
       rewardTag: currentReward.tag,
-    });
+    }, userId || undefined);
     void appendSupabaseTokenTransaction({
       title: currentReward.label,
       cost: 0,
       kind: "claim",
       balanceAfter: nextBalance,
-    });
+    }, userId || undefined);
 
     persistClaimState(todayKey, activeDay);
 

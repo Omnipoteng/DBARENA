@@ -68,6 +68,7 @@ function Tag({ label, active, onClick }: { label: string; active: boolean; onCli
 export default function OnboardingPage() {
   const router = useRouter();
   const supabase = useMemo(() => getSupabaseAuthClient(), []);
+  const [userId, setUserId] = useState<string | null>(null);
   const [step, setStep] = useState<StepId>(1);
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -89,9 +90,10 @@ export default function OnboardingPage() {
       const user = data.session?.user;
       if (!user) { router.replace("/login"); return; }
 
+      setUserId(user.id);
       setDbaUserKey(user.id);
 
-      const preferences = await loadSupabaseOnboardingPreferences();
+      const preferences = await loadSupabaseOnboardingPreferences(user.id);
       if (cancelled) return;
 
       if (preferences?.onboardingCompleted) { router.replace("/profile"); return; }
@@ -115,6 +117,7 @@ export default function OnboardingPage() {
   };
 
   const handleSave = async (onboardingCompleted: boolean) => {
+    if (!userId) return;
     setError(null);
     setSaving(true);
     try {
@@ -124,16 +127,16 @@ export default function OnboardingPage() {
         favoriteVerses: selectedVerses,
         location: location.trim(),
         onboardingCompleted,
-      });
+      }, userId);
 
-      const existingProfile = await loadSupabaseProfileSnapshot();
+      const existingProfile = await loadSupabaseProfileSnapshot(userId);
       if (!existingProfile) {
         await saveSupabaseProfileSnapshot({
           displayName: "Member", username: "member", bio: "",
           avatarSrc: "", bannerSrc: "", bannerKind: "image", bannerFocus: 50,
           border: "none", tags: [], rankKey: "Recruit", rankedPoints: 0,
           highestRank: "Recruit", totalMatch: 0, winRate: 0,
-        });
+        }, userId);
       }
 
       router.replace("/profile");

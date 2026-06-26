@@ -186,11 +186,11 @@ export async function loadSupabaseProfileSnapshotByKey(userKey: string): Promise
   };
 }
 
-export async function saveSupabaseProfileSnapshot(snapshot: ProfileSnapshot) {
+export async function saveSupabaseProfileSnapshot(snapshot: ProfileSnapshot, customUserKey?: string) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return;
 
-  const userKey = getDbaUserKey();
+  const userKey = customUserKey || getDbaUserKey();
 
   const { error: upsertError } = await supabase.from("profiles").upsert( 
     { 
@@ -219,22 +219,32 @@ export async function saveSupabaseProfileSnapshot(snapshot: ProfileSnapshot) {
 
   await supabase.from("profile_tags").delete().eq("profile_user_key", userKey);
 
-  if (snapshot.tags.length > 0) {
-    await supabase.from("profile_tags").insert(
-      snapshot.tags.map((label, position) => ({
-        profile_user_key: userKey,
-        label,
-        position,
-      })),
-    );
+  // Build the full tag list including internal skin/colors entries
+  const allTagsToSave: { profile_user_key: string; label: string; position: number }[] = [];
+  let pos = 0;
+
+  for (const label of snapshot.tags) {
+    allTagsToSave.push({ profile_user_key: userKey, label, position: pos++ });
+  }
+
+  if (snapshot.selectedSkin && snapshot.selectedSkin !== "none") {
+    allTagsToSave.push({ profile_user_key: userKey, label: `skin:${snapshot.selectedSkin}`, position: pos++ });
+  }
+
+  if (Array.isArray(snapshot.customSkinColors) && snapshot.customSkinColors.length > 0) {
+    allTagsToSave.push({ profile_user_key: userKey, label: `colors:${snapshot.customSkinColors.join(",")}`, position: pos++ });
+  }
+
+  if (allTagsToSave.length > 0) {
+    await supabase.from("profile_tags").insert(allTagsToSave);
   }
 }
 
-export async function loadSupabaseOnboardingPreferences() {
+export async function loadSupabaseOnboardingPreferences(customUserKey?: string) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return null;
 
-  const userKey = getDbaUserKey();
+  const userKey = customUserKey || getDbaUserKey();
 
   const { data: row, error } = await supabase
     .from("user_preferences")
@@ -253,11 +263,11 @@ export async function loadSupabaseOnboardingPreferences() {
   } satisfies OnboardingPreferenceSnapshot;
 }
 
-export async function saveSupabaseOnboardingPreferences(snapshot: OnboardingPreferenceSnapshot) {
+export async function saveSupabaseOnboardingPreferences(snapshot: OnboardingPreferenceSnapshot, customUserKey?: string) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return;
 
-  const userKey = getDbaUserKey();
+  const userKey = customUserKey || getDbaUserKey();
 
   await supabase.from("user_preferences").upsert(
     {
@@ -273,11 +283,11 @@ export async function saveSupabaseOnboardingPreferences(snapshot: OnboardingPref
   );
 }
 
-export async function loadSupabaseTokenWallet() {
+export async function loadSupabaseTokenWallet(customUserKey?: string) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return null;
 
-  const userKey = getDbaUserKey();
+  const userKey = customUserKey || getDbaUserKey();
 
   const [{ data: walletRow, error: walletError }, { data: historyRows }] = await Promise.all([
     supabase.from("token_wallets").select("*").eq("user_key", userKey).maybeSingle(),
@@ -305,11 +315,11 @@ export async function loadSupabaseTokenWallet() {
   } satisfies TokenWalletSnapshot;
 }
 
-export async function saveSupabaseTokenWallet(snapshot: TokenWalletSnapshot) {
+export async function saveSupabaseTokenWallet(snapshot: TokenWalletSnapshot, customUserKey?: string) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return;
 
-  const userKey = getDbaUserKey();
+  const userKey = customUserKey || getDbaUserKey();
 
   const payload: Record<string, unknown> = {
     user_key: userKey,
@@ -332,16 +342,19 @@ export async function saveSupabaseTokenWallet(snapshot: TokenWalletSnapshot) {
   );
 }
 
-export async function appendSupabaseTokenTransaction(entry: {
-  title: string;
-  cost: number;
-  kind: "claim" | "redeem";
-  balanceAfter: number;
-}) {
+export async function appendSupabaseTokenTransaction(
+  entry: {
+    title: string;
+    cost: number;
+    kind: "claim" | "redeem";
+    balanceAfter: number;
+  },
+  customUserKey?: string
+) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return;
 
-  const userKey = getDbaUserKey();
+  const userKey = customUserKey || getDbaUserKey();
 
   await supabase.from("token_transactions").insert({
     user_key: userKey,
@@ -352,18 +365,21 @@ export async function appendSupabaseTokenTransaction(entry: {
   });
 }
 
-export async function recordSupabaseDailyLoginClaim(entry: {
-  claimDate: string;
-  streakDay: number;
-  rewardDay: number;
-  rewardType: "token" | "tag";
-  rewardAmount?: number;
-  rewardTag?: string;
-}) {
+export async function recordSupabaseDailyLoginClaim(
+  entry: {
+    claimDate: string;
+    streakDay: number;
+    rewardDay: number;
+    rewardType: "token" | "tag";
+    rewardAmount?: number;
+    rewardTag?: string;
+  },
+  customUserKey?: string
+) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return;
 
-  const userKey = getDbaUserKey();
+  const userKey = customUserKey || getDbaUserKey();
 
   await supabase.from("daily_login_claims").insert({
     user_key: userKey,
@@ -375,6 +391,7 @@ export async function recordSupabaseDailyLoginClaim(entry: {
     reward_tag: entry.rewardTag ?? null,
   });
 }
+
 
 export async function loadSupabasePosts(fallbackPosts: Post[]) {
   const supabase = getSupabaseBrowserClient();
@@ -414,13 +431,16 @@ export async function loadSupabasePosts(fallbackPosts: Post[]) {
   })) satisfies Post[];
 }
 
-export async function loadSupabaseRankedMatches(fallbackMatches: RankedMatchSnapshot[] = []) {
+export async function loadSupabaseRankedMatches(fallbackMatches: RankedMatchSnapshot[] = [], customUserKey?: string) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return fallbackMatches;
+
+  const userKey = customUserKey || getDbaUserKey();
 
   const { data, error } = await supabase
     .from("ranked_matches")
     .select("id,opponent,platform,result,delta,from_rank,to_rank,match_date,preview_image_url")
+    .eq("user_key", userKey)
     .order("match_date", { ascending: false });
 
   if (error) {
@@ -522,18 +542,32 @@ export async function loadSupabaseFriends() {
       .map((row) => row.follower_user_key as string),
   );
 
-  return profileRows
-    .filter((profile) => profile.user_key !== userKey)
-    .map((profile) => ({
-      id: String(profile.user_key),
+  // Deduplicate by user_key using a Map: the profiles table uses user_key as
+  // primary key so the DB cannot return two rows with the same key, but certain
+  // Supabase RLS policies that use internal JOINs can produce phantom duplicate
+  // rows in the PostgREST response.  Building a Map guarantees each user appears
+  // exactly once regardless of the source.
+  const seen = new Map<string, SocialProfile>();
+
+  for (const profile of profileRows) {
+    const key = String(profile.user_key);
+
+    // Skip the currently logged-in user and already-seen keys.
+    if (key === userKey || seen.has(key)) continue;
+
+    seen.set(key, {
+      id: key,
       name: String(profile.display_name ?? ""),
       username: String(profile.username ?? ""),
       avatar: String(profile.avatar_url ?? ""),
       banner: String(profile.banner_url ?? ""),
       bio: String(profile.bio ?? ""),
-      following: followingSet.has(String(profile.user_key)),
-      followsMe: followersSet.has(String(profile.user_key)),
-    })) satisfies SocialProfile[];
+      following: followingSet.has(key),
+      followsMe: followersSet.has(key),
+    });
+  }
+
+  return Array.from(seen.values()) satisfies SocialProfile[];
 }
 
 export async function loadSupabaseFriendCountsByUserKey(userKey: string) {
@@ -681,11 +715,11 @@ export async function loadSupabaseInventoryItems(fallbackItems: TokenShopItem[])
   })) satisfies TokenShopItem[]; 
 } 
 
-export async function loadSupabaseSitePreferences(fallbackPreferences: SitePreferences) {
+export async function loadSupabaseSitePreferences(fallbackPreferences: SitePreferences, customUserKey?: string) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return fallbackPreferences;
 
-  const userKey = getDbaUserKey();
+  const userKey = customUserKey || getDbaUserKey();
 
   const { data, error } = await supabase
     .from("site_preferences")
@@ -731,11 +765,11 @@ export async function loadSupabaseSitePreferences(fallbackPreferences: SitePrefe
   } satisfies SitePreferences;
 }
 
-export async function saveSupabaseSitePreferences(preferences: SitePreferences) {
+export async function saveSupabaseSitePreferences(preferences: SitePreferences, customUserKey?: string) {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return;
 
-  const userKey = getDbaUserKey();
+  const userKey = customUserKey || getDbaUserKey();
 
   await supabase.from("site_preferences").upsert(
     {
@@ -895,18 +929,24 @@ export async function createSupabaseUser(user: {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return null;
 
+  // Use upsert instead of insert so that calling this from the admin panel
+  // for a user who already bootstrapped their profile via the normal auth
+  // flow does not throw a primary-key violation (user_key is the PK).
   const { data, error } = await supabase
     .from("profiles")
-    .insert({
-      user_key: user.id,
-      display_name: user.name,
-      email: user.email,
-      role: user.role,
-      notes: user.notes,
-      status: user.status,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    })
+    .upsert(
+      {
+        user_key: user.id,
+        display_name: user.name,
+        email: user.email,
+        role: user.role,
+        notes: user.notes,
+        status: user.status,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_key" },
+    )
     .select()
     .maybeSingle();
 
