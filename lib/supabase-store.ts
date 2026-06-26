@@ -91,7 +91,7 @@ function normalizeUniqueStringArray(value: unknown) {
   return Array.from(new Set(normalizeStringArray(value).map((item) => item.trim()).filter(Boolean)));
 }
 
-export async function loadSupabaseProfileSnapshot(customUserKey?: string) {
+export async function loadSupabaseProfileSnapshot(customUserKey?: string): Promise<ProfileSnapshot | null> {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return null;
 
@@ -111,6 +111,11 @@ export async function loadSupabaseProfileSnapshot(customUserKey?: string) {
     .eq("profile_user_key", userKey)
     .order("position", { ascending: true });
 
+  const allTags = normalizeStringArray(tagsRows?.map((item) => item.label));
+  const skinTag = allTags.find((t) => t.startsWith("skin:"));
+  const colorsTag = allTags.find((t) => t.startsWith("colors:"));
+  const cleanTags = allTags.filter((t) => !t.startsWith("skin:") && !t.startsWith("colors:"));
+
   return { 
     email: typeof profileRow.email === "string" ? profileRow.email : "", 
     displayName: profileRow.display_name ?? "", 
@@ -122,7 +127,9 @@ export async function loadSupabaseProfileSnapshot(customUserKey?: string) {
     bannerFocus: typeof profileRow.banner_focus === "number" ? profileRow.banner_focus : 50,
     bannerCrop: profileRow.banner_crop ?? null,
     border: (profileRow.border_key as ProfileBorderKey) ?? "legend",
-    tags: normalizeStringArray(tagsRows?.map((item) => item.label)),
+    selectedSkin: skinTag ? (skinTag.substring(5) as ProfileSkinKey) : "none",
+    customSkinColors: colorsTag ? colorsTag.substring(7).split(",") : ["#000000", "#000000"],
+    tags: cleanTags,
     rankKey: (profileRow.rank_key as ProfileRankKey) ?? "Legend",
     rankedPoints: typeof profileRow.ranked_points === "number" ? profileRow.ranked_points : 0,
     highestRank: (profileRow.highest_rank as ProfileRankKey | string) ?? "Mythic",
@@ -131,7 +138,7 @@ export async function loadSupabaseProfileSnapshot(customUserKey?: string) {
   } satisfies ProfileSnapshot;
 }
 
-export async function loadSupabaseProfileSnapshotByKey(userKey: string) {
+export async function loadSupabaseProfileSnapshotByKey(userKey: string): Promise<ProfileSnapshot | null> {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return null;
 
@@ -152,6 +159,11 @@ export async function loadSupabaseProfileSnapshotByKey(userKey: string) {
     .eq("profile_user_key", cleanedKey)
     .order("position", { ascending: true });
 
+  const allTags = normalizeStringArray(tagsRows?.map((item) => item.label));
+  const skinTag = allTags.find((t) => t.startsWith("skin:"));
+  const colorsTag = allTags.find((t) => t.startsWith("colors:"));
+  const cleanTags = allTags.filter((t) => !t.startsWith("skin:") && !t.startsWith("colors:"));
+
   return {
     email: typeof profileRow.email === "string" ? profileRow.email : "",
     displayName: profileRow.display_name ?? "",
@@ -163,13 +175,15 @@ export async function loadSupabaseProfileSnapshotByKey(userKey: string) {
     bannerFocus: typeof profileRow.banner_focus === "number" ? profileRow.banner_focus : 50,
     bannerCrop: profileRow.banner_crop ?? null,
     border: (profileRow.border_key as ProfileBorderKey) ?? "legend",
-    tags: normalizeStringArray(tagsRows?.map((item) => item.label)),
+    selectedSkin: skinTag ? (skinTag.substring(5) as ProfileSkinKey) : "none",
+    customSkinColors: colorsTag ? colorsTag.substring(7).split(",") : ["#000000", "#000000"],
+    tags: cleanTags,
     rankKey: (profileRow.rank_key as ProfileRankKey) ?? "Legend",
     rankedPoints: typeof profileRow.ranked_points === "number" ? profileRow.ranked_points : 0,
     highestRank: (profileRow.highest_rank as ProfileRankKey | string) ?? "Mythic",
     totalMatch: typeof profileRow.total_match === "number" ? profileRow.total_match : 0,
     winRate: typeof profileRow.win_rate === "number" ? profileRow.win_rate : 0,
-  } satisfies ProfileSnapshot;
+  };
 }
 
 export async function saveSupabaseProfileSnapshot(snapshot: ProfileSnapshot) {
