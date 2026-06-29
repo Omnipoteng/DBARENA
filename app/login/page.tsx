@@ -76,7 +76,8 @@ export default function LoginPage() {
   }) => {
     setDbaUserKey(params.userId);
 
-    const existingProfile = await loadSupabaseProfileSnapshot(params.userId);
+    // profiles.user_key is an app-controlled key; load using the same source as save/load defaults.
+    const existingProfile = await loadSupabaseProfileSnapshot();
     if (existingProfile) {
       return;
     }
