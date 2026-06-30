@@ -45,7 +45,7 @@ create table if not exists public.token_wallets (
   updated_at timestamptz not null default now()
 );
 
-create table if not exists public.daily_login_claims (
+create table if not exists public.daily_lxogin_claims (
   id bigserial primary key,
   user_key text not null,
   claim_date date not null,

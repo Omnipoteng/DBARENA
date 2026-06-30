@@ -4,6 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import type { Post } from "@/types/post";
+import { normalizeImageSrc } from "@/lib/image";
 
 export default function NewsCard({ post }: { post: Post }) {
   return (
@@ -15,7 +16,7 @@ export default function NewsCard({ post }: { post: Post }) {
       <article className="flex h-full flex-col">
         <div className="relative overflow-hidden border border-black/10 bg-white">
           <Image
-            src={post.image}
+            src={normalizeImageSrc(post.image)}
             alt={post.title}
             width={1200}
             height={900}

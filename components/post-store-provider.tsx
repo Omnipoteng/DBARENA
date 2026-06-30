@@ -3,110 +3,119 @@
 import {
   createContext,
   ReactNode,
+  useCallback,
   useContext,
   useEffect,
   useState,
 } from "react";
 
-import { initialPosts } from "@/data/posts"; 
-import { 
-  loadSupabasePosts, 
-  saveSupabasePosts, 
-} from "@/lib/supabase-store"; 
-import type { Post } from "@/types/post"; 
+import {
+  insertSupabasePost,
+  loadSupabasePostsByOrigin,
+  uploadImageToStorage,
+} from "@/lib/supabase-store";
+import type { Post } from "@/types/post";
+
+export type { Post };
 
 type NewPost = Omit<Post, "id">;
 
 type PostStoreContextValue = {
   posts: Post[];
+  newsPosts: Post[];
   addPost: (post: NewPost) => void;
+  refreshPosts: () => Promise<void>;
+  publishPost: (params: {
+    title: string;
+    description: string;
+    content?: string;
+    date: string;
+    origin: string;
+    imageFile?: File | null;
+    imageFallbackUrl?: string;
+  }) => Promise<Post>;
 };
-
-const STORAGE_KEY = "dbarena-posts";
-const initialPostIds = new Set(initialPosts.map((post) => post.id));
 
 const PostStoreContext = createContext<PostStoreContextValue | null>(null);
 
 export function PostStoreProvider({ children }: { children: ReactNode }) {
-  const [posts, setPosts] = useState<Post[]>(() => {
-    if (typeof window === "undefined") {
-      return initialPosts;
-    }
+  const [posts, setPosts] = useState<Post[]>([]);
+  const [newsPosts, setNewsPosts] = useState<Post[]>([]);
 
-    const savedPosts = window.localStorage.getItem(STORAGE_KEY);
+  const loadFromDb = useCallback(async () => {
+    // Hanya ambil posts dengan origin = "news" dari Supabase
+    // Tidak ada fallback ke data dummy — kalau kosong, tetap kosong
+    const newsRemote = await loadSupabasePostsByOrigin("news", []);
+    setNewsPosts(newsRemote);
+    setPosts(newsRemote);
+  }, []);
 
-    if (!savedPosts) {
-      return initialPosts;
-    }
+  useEffect(() => {
+    void loadFromDb();
+  }, [loadFromDb]);
 
-    try {
-      const parsedPosts = JSON.parse(savedPosts) as Post[];
+  const refreshPosts = useCallback(async () => {
+    await loadFromDb();
+  }, [loadFromDb]);
 
-      if (!Array.isArray(parsedPosts) || parsedPosts.length === 0) {
-        return initialPosts;
-      }
+  function addPost(post: NewPost) {
+    const newEntry: Post = {
+      id: `post-${Date.now()}`,
+      ...post,
+    };
+    setPosts((current) => [newEntry, ...current]);
+    setNewsPosts((current) => [newEntry, ...current]);
+  }
 
-      const customPosts = parsedPosts.filter(
-        (post) => !initialPostIds.has(post.id),
+  async function publishPost(params: {
+    title: string;
+    description: string;
+    date: string;
+    origin: string;
+    imageFile?: File | null;
+    imageFallbackUrl?: string;
+  }): Promise<Post> {
+    let imageUrl = params.imageFallbackUrl ?? "";
+
+    if (params.imageFile) {
+      const uploaded = await uploadImageToStorage(
+        params.imageFile,
+        params.origin
       );
-
-      return [...customPosts, ...initialPosts];
-    } catch {
-      window.localStorage.removeItem(STORAGE_KEY);
-
-      return initialPosts;
+      if (uploaded) {
+        imageUrl = uploaded;
+      }
     }
-  });
 
-  useEffect(() => { 
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(posts)); 
-  }, [posts]); 
+    // Insert ke Supabase — langsung published, tanpa approval
+    const inserted = await insertSupabasePost({
+      title: params.title,
+      description: params.description,
+      content: params.content ?? "",
+      image_url: imageUrl || "/images/1.jpg",
+      date: params.date,
+      origin: params.origin,
+    });
 
-  useEffect(() => { 
-    let cancelled = false; 
+    if (!inserted) {
+      throw new Error("Gagal menyimpan ke database. Cek koneksi Supabase.");
+    }
 
-    void loadSupabasePosts(initialPosts).then((remotePosts) => { 
-      if (cancelled) return; 
-      if (remotePosts.length > 0) { 
-        setPosts((current) => { 
-          const customPosts = current.filter((post) => !initialPostIds.has(post.id)); 
-          const merged = [...customPosts, ...remotePosts]; 
-          const seen = new Set<string>(); 
+    // Optimistic update — langsung tampil di homepage tanpa reload
+    setPosts((current) => [inserted, ...current]);
+    setNewsPosts((current) => [inserted, ...current]);
 
-          return merged.filter((post) => { 
-            if (seen.has(post.id)) return false; 
-            seen.add(post.id); 
-            return true; 
-          }); 
-        }); 
-      } 
-    }); 
-
-    return () => { 
-      cancelled = true; 
-    }; 
-  }, []); 
-
-  useEffect(() => { 
-    const customPosts = posts.filter((post) => !initialPostIds.has(post.id)); 
-    void saveSupabasePosts(customPosts); 
-  }, [posts]); 
-
-  function addPost(post: NewPost) { 
-    setPosts((current) => [ 
-      { 
-        id: `post-${Date.now()}`,
-        ...post,
-      },
-      ...current,
-    ]);
+    return inserted;
   }
 
   return (
     <PostStoreContext.Provider
       value={{
         posts,
+        newsPosts,
         addPost,
+        refreshPosts,
+        publishPost,
       }}
     >
       {children}

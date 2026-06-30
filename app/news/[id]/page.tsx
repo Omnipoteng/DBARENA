@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { usePosts } from "@/components/post-store-provider";
 import Navbar from "@/components/sections/navbar";
 import Footer from "@/components/sections/footer";
+import { normalizeImageSrc } from "@/lib/image";
 
 export default function NewsDetailPage() {
   const params = useParams();
@@ -61,7 +62,7 @@ export default function NewsDetailPage() {
           
           <div className="relative w-full h-[350px] sm:h-[500px] mb-12 overflow-hidden rounded-[2rem] bg-black/5">
             <Image
-              src={post.image}
+              src={normalizeImageSrc(post.image)}
               alt={post.title}
               fill
               className="object-cover"
@@ -73,16 +74,23 @@ export default function NewsDetailPage() {
             <p className="text-xl sm:text-2xl leading-relaxed font-medium text-black/90 mb-8">
               {post.description}
             </p>
-            
-            <p className="mb-6 leading-relaxed">
-              Topik ini telah menjadi perbincangan hangat di berbagai forum dan komunitas DBARENA. Para pengamat memberikan pandangan yang beragam, mulai dari prediksi hasil yang mengejutkan hingga analisis mendalam mengenai kekuatan dan kelemahan masing-masing pihak.
-            </p>
-            <p className="mb-6 leading-relaxed">
-              Tim moderator kami terus memantau perkembangan lebih lanjut dan akan memverifikasi setiap sumber informasi. Diskusi masih berlangsung di platform komunitas, dan Anda bisa ikut berpartisipasi dengan menyampaikan pendapat Anda melalui kolom komentar atau langsung bergabung di server Discord resmi kami.
-            </p>
-            <p className="leading-relaxed font-medium text-black/90 mt-8">
-              Jangan lewatkan update berikutnya! Pastikan untuk selalu mengecek jadwal event dan berita terbaru di halaman utama DBARENA.
-            </p>
+
+            {(post.content ?? "").trim() ? (
+              <div className="space-y-6 whitespace-pre-line leading-relaxed text-black/75">
+                {(post.content ?? "")
+                  .trim()
+                  .split(/\n{2,}/)
+                  .map((paragraph) => paragraph.trim())
+                  .filter(Boolean)
+                  .map((paragraph, index) => (
+                    <p key={`${post.id}-body-${index}`}>{paragraph}</p>
+                  ))}
+              </div>
+            ) : (
+              <p className="border-t border-black/10 pt-6 leading-relaxed text-black/45">
+                Belum ada isi berita untuk artikel ini.
+              </p>
+            )}
           </div>
         </article>
       </main>

@@ -5,6 +5,7 @@ import Image from "next/image";
 import { FormEvent, useState } from "react";
 
 import { usePosts } from "@/components/post-store-provider";
+import { normalizeImageSrc } from "@/lib/image";
 
 type FormState = {
   title: string;
@@ -159,7 +160,7 @@ export default function AdminPage() {
                 >
                   <div className="mb-3 overflow-hidden rounded-2xl border border-black/8">
                     <Image
-                      src={post.image}
+                      src={normalizeImageSrc(post.image)}
                       alt={post.title}
                       width={1200}
                       height={900}

@@ -4,6 +4,7 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 import type { Post } from "@/types/post";
+import { normalizeImageSrc } from "@/lib/image";
 
 const sliderImages = [
   "/images/news baru.jpeg",
@@ -192,7 +193,7 @@ export default function TopNewsSlider({ posts }: { posts: Post[] }) {
               className="relative h-[46vw] min-h-[230px] max-h-[330px] w-full shrink-0 snap-center overflow-hidden sm:min-h-[280px] sm:max-h-[390px] lg:h-[30vw] lg:max-h-[440px]"
             >
               <Image
-                src={post.image}
+                src={normalizeImageSrc(post.image)}
                 alt={post.title}
                 fill
                 sizes="(max-width: 1280px) 100vw, 1280px"

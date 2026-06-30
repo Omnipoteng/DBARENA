@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import type { Post } from "@/types/post";
+import { normalizeImageSrc } from "@/lib/image";
 
 export default function FeaturedNews({ post }: { post?: Post }) {
   if (!post) {
@@ -31,7 +32,7 @@ export default function FeaturedNews({ post }: { post?: Post }) {
         <article className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
           <div className="relative min-h-[280px] overflow-hidden border border-black/10 bg-white sm:min-h-[360px] lg:min-h-[430px]">
             <Image
-              src={post.image}
+              src={normalizeImageSrc(post.image)}
               alt={post.title}
               fill
               sizes="(max-width: 1024px) 100vw, 760px"

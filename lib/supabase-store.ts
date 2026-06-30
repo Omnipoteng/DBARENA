@@ -4,6 +4,7 @@ import { getDbaUserKey } from "@/lib/dba-user";
 import { getSupabaseBrowserClient } from "@/lib/supabase-browser"; 
 import type { TokenShopItem } from "@/lib/dba-token"; 
 import type { SitePreferences } from "@/lib/site-preferences";
+import { normalizeImageSrc } from "@/lib/image";
 
 export type ProfileBorderKey = "none" | "legend" | "mythic" | "apex";
 export type ProfileSkinKey = "none" | "sunset" | "neon" | "ocean" | "emerald" | "cosmic";
@@ -399,7 +400,7 @@ export async function loadSupabasePosts(fallbackPosts: Post[]) {
 
   const { data, error } = await supabase
     .from("posts")
-    .select("id,title,description,image_url,date")
+    .select("id,title,description,content,image_url,date")
     .order("date", { ascending: false });
 
   if (error) {
@@ -412,6 +413,7 @@ export async function loadSupabasePosts(fallbackPosts: Post[]) {
         id: post.id,
         title: post.title,
         description: post.description,
+        content: post.content ?? "",
         image_url: post.image,
         date: post.date,
         origin: "seed",
@@ -426,7 +428,8 @@ export async function loadSupabasePosts(fallbackPosts: Post[]) {
     id: String(post.id),
     title: String(post.title),
     description: String(post.description),
-    image: String(post.image_url),
+    content: typeof post.content === "string" ? post.content : "",
+    image: normalizeImageSrc(post.image_url),
     date: String(post.date),
   })) satisfies Post[];
 }
@@ -503,6 +506,7 @@ export async function saveSupabasePosts(posts: Post[]) {
       id: post.id,
       title: post.title,
       description: post.description,
+      content: post.content ?? "",
       image_url: post.image,
       date: post.date,
       origin: "custom",
@@ -958,3 +962,122 @@ export async function createSupabaseUser(user: {
   return data;
 }
 
+// ---------------------------------------------------------------------------
+// Dashboard helpers — insert a single post + image upload
+// ---------------------------------------------------------------------------
+
+/**
+ * Upload an image file to Supabase Storage (bucket: "posts").
+ * Returns the public URL of the uploaded file, or null on failure.
+ */
+export async function uploadImageToStorage(
+  file: File,
+  folder: string = "uploads"
+): Promise<string | null> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return null;
+
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  const { data, error } = await supabase.storage
+    .from("posts")
+    .upload(fileName, file, { upsert: false, cacheControl: "3600" });
+
+  if (error) {
+    console.error("Storage upload error:", error);
+    return null;
+  }
+
+  const { data: urlData } = supabase.storage
+    .from("posts")
+    .getPublicUrl(data.path);
+
+  return urlData?.publicUrl ?? null;
+}
+
+/**
+ * Insert one new post into the `posts` table.
+ * origin = category key (e.g. "news" | "gallery" | "events" | "library" |
+ *                         "marketplace" | "slider" | "terminology")
+ * Approval is intentionally bypassed — post is published immediately.
+ */
+export async function insertSupabasePost(post: {
+  title: string;
+  description: string;
+  content?: string;
+  image_url: string;
+  date: string;
+  origin: string;
+}): Promise<Post | null> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return null;
+
+  const id = `post-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
+  const { data, error } = await supabase
+    .from("posts")
+    .insert({
+      id,
+      title: post.title,
+      description: post.description,
+      content: post.content ?? "",
+      image_url: post.image_url,
+      date: post.date,
+      origin: post.origin,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .select("id,title,description,content,image_url,date")
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error inserting post:", error);
+    throw error;
+  }
+
+  if (!data) return null;
+
+  return {
+    id: String(data.id),
+    title: String(data.title),
+    description: String(data.description),
+    content: typeof data.content === "string" ? data.content : "",
+    image: normalizeImageSrc(data.image_url),
+    date: String(data.date),
+  };
+}
+
+/**
+ * Load posts filtered by origin (category), ordered newest first.
+ * Used by page sections (news, gallery, events, etc.)
+ */
+export async function loadSupabasePostsByOrigin(
+  origin: string,
+  fallback: Post[] = []
+): Promise<Post[]> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return fallback;
+
+  const { data, error } = await supabase
+    .from("posts")
+    .select("id,title,description,content,image_url,date")
+    .eq("origin", origin)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error(`Error loading posts (origin=${origin}):`, error);
+    return fallback;
+  }
+
+  if (!data || data.length === 0) return fallback;
+
+  return data.map((post) => ({
+    id: String(post.id),
+    title: String(post.title),
+    description: String(post.description),
+    content: typeof post.content === "string" ? post.content : "",
+    image: normalizeImageSrc(post.image_url),
+    date: String(post.date),
+  })) satisfies Post[];
+}

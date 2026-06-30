@@ -55,7 +55,7 @@ export default async function RootLayout({
       className={cn("h-full", "antialiased", coolvetica.variable, "font-sans", theme === "dark" && "dark")}
       style={{ colorScheme: theme }}
     >
-      <body className="min-h-full bg-background font-sans text-foreground transition-colors duration-300"> 
+      <body suppressHydrationWarning className="min-h-full bg-background font-sans text-foreground transition-colors duration-300">
         <PostStoreProvider>{children}</PostStoreProvider> 
         <AuthSessionSync /> 
         <SitePreferencesSync /> 

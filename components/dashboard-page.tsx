@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { loadSupabaseAllUsers, updateSupabaseUserAccess, createSupabaseUser } from "@/lib/supabase-store";
+import { usePosts } from "@/components/post-store-provider";
 
 type DashboardCategoryKey =
   | "news_slider"
@@ -147,9 +148,10 @@ const categories: DashboardCategory[] = [
         multiline: true,
       },
       {
-        key: "image",
-        label: "Image Path",
-        placeholder: "/images/news banner.jpg",
+        key: "content",
+        label: "News Content",
+        placeholder: "Tulis isi berita lengkap untuk halaman detail /news/[id].",
+        multiline: true,
       },
       {
         key: "date",
@@ -490,6 +492,7 @@ function getInitialForm(category: DashboardCategoryKey) {
 }
 
 export default function DashboardPage() {
+  const { publishPost, refreshPosts } = usePosts();
   const [mode, setMode] = useState<DashboardMode>("content");
   const [selectedCategory, setSelectedCategory] =
     useState<DashboardCategoryKey>("news");
@@ -497,7 +500,11 @@ export default function DashboardPage() {
     getInitialForm("news"),
   );
   const [filePreviews, setFilePreviews] = useState<Record<string, string>>({});
+  const [uploadedFiles, setUploadedFiles] = useState<Record<string, File>>({});
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle");
+  const [submitMessage, setSubmitMessage] = useState("");
   const [users, setUsers] = useState<DashboardUser[]>(
     initialUsers.map((u) => ({ ...u, isMuted: false, isBanned: false }))
   );
@@ -633,7 +640,10 @@ export default function DashboardPage() {
     setSelectedCategory(category);
     setForm(getInitialForm(category));
     setFilePreviews({});
+    setUploadedFiles({});
     setDraftSavedAt(null);
+    setSubmitStatus("idle");
+    setSubmitMessage("");
   }
 
   function getRoleDefinition(role: DashboardRoleKey) {
@@ -656,22 +666,80 @@ export default function DashboardPage() {
   }
 
   function handleFileChange(key: string, file: File | undefined) {
+    if (file) {
+      setUploadedFiles((current) => ({ ...current, [key]: file }));
+    } else {
+      setUploadedFiles((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+    }
     setFilePreviews((current) => {
       const next = { ...current };
-
       if (file) {
         next[key] = URL.createObjectURL(file);
       } else {
         delete next[key];
       }
-
       return next;
     });
   }
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setDraftSavedAt(new Date().toLocaleString("en-US"));
+    setIsSubmitting(true);
+    setSubmitStatus("idle");
+    setSubmitMessage("");
+
+    try {
+      const title =
+        form.title || form.headline || form.term || form.name || form.character || "";
+      const description =
+        form.description || form.definition || form.debateUse || form.summary || form.caption || "";
+      const content = form.content || form.photoDescription || "";
+      const imageFallbackUrl = form.image || "/images/news banner.jpg";
+      const imageFile = uploadedFiles.photo || uploadedFiles.image || null;
+      const date = form.date || new Date().toISOString().split("T")[0];
+
+      if (!title.trim()) throw new Error("Judul tidak boleh kosong.");
+      if (!description.trim()) throw new Error("Deskripsi tidak boleh kosong.");
+
+      const originMap: Record<DashboardCategoryKey, string> = {
+        news: "news",
+        news_slider: "slider",
+        gallery: "gallery",
+        events: "events",
+        library: "library",
+        terminology: "terminology",
+        marketplace: "marketplace",
+      };
+      const origin = originMap[selectedCategory] ?? selectedCategory;
+
+        await publishPost({
+          title: title.trim(),
+          description: description.trim(),
+          content: content.trim(),
+          date,
+          origin,
+          imageFile,
+        imageFallbackUrl,
+      });
+
+      setForm(getInitialForm(selectedCategory));
+      setFilePreviews({});
+      setUploadedFiles({});
+      setDraftSavedAt(new Date().toLocaleString("id-ID"));
+      setSubmitStatus("success");
+      setSubmitMessage(`Berhasil dipublikasikan ke kategori "${origin}"!`);
+      void refreshPosts();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Upload gagal. Coba lagi.";
+      setSubmitStatus("error");
+      setSubmitMessage(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   function handleNewUserSubmit(event: FormEvent<HTMLFormElement>) {
@@ -2545,14 +2613,27 @@ export default function DashboardPage() {
 
                 <button
                   type="submit"
-                  className="mt-2 inline-flex items-center justify-center rounded-full bg-black px-4 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-800"
+                  disabled={isSubmitting}
+                  className="mt-2 inline-flex items-center justify-center rounded-full bg-black px-4 py-2.5 text-sm font-medium text-white transition hover:bg-neutral-800 disabled:opacity-60 disabled:cursor-not-allowed"
                 >
-                  Save preview
+                  {isSubmitting ? "Menyimpan..." : "Publish"}
                 </button>
 
-                {draftSavedAt ? (
+                {submitStatus === "success" && (
+                  <p className="text-xs font-medium text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                    ✓ {submitMessage}
+                  </p>
+                )}
+
+                {submitStatus === "error" && (
+                  <p className="text-xs font-medium text-red-700 bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                    ✕ {submitMessage}
+                  </p>
+                )}
+
+                {submitStatus === "idle" && draftSavedAt ? (
                   <p className="text-xs text-black/45">
-                    Draft refreshed at {draftSavedAt}
+                    Terakhir dipublikasikan: {draftSavedAt}
                   </p>
                 ) : null}
               </form>

@@ -343,17 +343,12 @@ const drawerItems: DrawerItem[] = [
   },
 ];
 
-export default function Navbar() {
-  const [isOpen, setIsOpen] = useState(false); 
-  const [isCollapsed, setIsCollapsed] = useState(() => { 
-    if (typeof window === "undefined") { 
-      return false; 
-    } 
-
-    return localStorage.getItem("sidebar-collapsed") === "true"; 
-  }); 
-  const pathname = usePathname();
-  const router = useRouter();
+export default function Navbar() { 
+  const [isOpen, setIsOpen] = useState(false);  
+  const [isCollapsed, setIsCollapsed] = useState(false);  
+  const [hasMounted, setHasMounted] = useState(false);
+  const pathname = usePathname(); 
+  const router = useRouter(); 
 
   // Floating mobile bubble gesture state
   const [bubbleX, setBubbleX] = useState(16);
@@ -510,10 +505,24 @@ export default function Navbar() {
     }, 800);
   };
 
+  useEffect(() => {  
+    const storedCollapsed = window.localStorage.getItem("sidebar-collapsed") === "true"; 
+    setIsCollapsed(storedCollapsed); 
+    setHasMounted(true);
+
+    const root = document.documentElement;  
+    if (storedCollapsed) { 
+      root.classList.add("sidebar-collapsed"); 
+    } else { 
+      root.classList.remove("sidebar-collapsed"); 
+    } 
+  }, []); 
+
   useEffect(() => { 
+    if (!hasMounted) return; 
     const root = document.documentElement; 
-    if (isCollapsed) {
-      root.classList.add("sidebar-collapsed");
+    if (isCollapsed) { 
+      root.classList.add("sidebar-collapsed"); 
     } else {
       root.classList.remove("sidebar-collapsed");
     }
@@ -559,10 +568,12 @@ export default function Navbar() {
     router.refresh();
   };
 
-  const handleToggleCollapse = (collapsed: boolean) => {
-    setIsCollapsed(collapsed);
-    localStorage.setItem("sidebar-collapsed", String(collapsed));
-  };
+  const handleToggleCollapse = (collapsed: boolean) => { 
+    setIsCollapsed(collapsed); 
+    localStorage.setItem("sidebar-collapsed", String(collapsed)); 
+  }; 
+
+  const effectiveIsCollapsed = hasMounted ? isCollapsed : false;
 
   const isLinkActive = (href: string) => {
     if (href === "/#home" || href === "/") {
@@ -697,11 +708,11 @@ export default function Navbar() {
   const toolsItems = drawerItems.filter((item) => toolsLabels.includes(item.label));
   const updatesItems = drawerItems.filter((item) => updatesLabels.includes(item.label));
 
-  const renderSidebarContent = (isCollapsedView: boolean, isMobileView: boolean) => {
+  const renderSidebarContent = (isCollapsedView: boolean, isMobileView: boolean) => { 
     return (
-      <div className="flex flex-col h-full bg-white dark:bg-[#121212] text-black dark:text-white">
-        {isCollapsedView ? (
-          <div className="flex flex-col items-center py-5 shrink-0 border-b border-black/8 dark:border-white/8">
+      <div suppressHydrationWarning className="flex flex-col h-full bg-white dark:bg-[#121212] text-black dark:text-white">
+        {isCollapsedView ? ( 
+          <div className="flex flex-col items-center py-5 shrink-0 border-b border-black/8 dark:border-white/8"> 
             <button
               type="button"
               onClick={() => handleToggleCollapse(false)}
@@ -755,7 +766,7 @@ export default function Navbar() {
           </div>
         )}
 
-        {isCollapsedView ? (
+        {isCollapsedView ? ( 
           <div className="flex flex-col items-center py-4 shrink-0 border-b border-black/8 dark:border-white/8">
             <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-black/30 dark:text-white/30 mb-1">Stores</p>
             <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-black to-neutral-700 dark:from-white dark:to-neutral-300 text-white dark:text-black flex items-center justify-center font-bold text-base shadow-sm cursor-pointer hover:scale-105 transition duration-300">
@@ -825,8 +836,8 @@ export default function Navbar() {
   return (
     <>
       {/* Mobile Top Header (Intact) */}
-      <header className="sticky top-0 z-50 border-b border-black/8 bg-white/88 backdrop-blur-xl lg:hidden">
-        <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
+      <header suppressHydrationWarning className="sticky top-0 z-50 border-b border-black/8 bg-white/88 backdrop-blur-xl lg:hidden">
+        <div suppressHydrationWarning className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
           <Link
             href="/"
             className="inline-flex items-center transition duration-300 hover:opacity-70"
@@ -905,6 +916,7 @@ export default function Navbar() {
 
       {/* Mobile AssistiveTouch Draggable Floating Toggle Widget */}
       <div
+        suppressHydrationWarning
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
@@ -959,6 +971,7 @@ export default function Navbar() {
         />
 
         <aside
+          suppressHydrationWarning
           className={`absolute left-4 top-4 bottom-4 flex w-[calc(100vw-32px)] max-w-[288px] flex-col bg-white dark:bg-[#121212] border border-black/10 dark:border-white/10 rounded-[24px] shadow-2xl transition duration-300 ${
             isOpen ? "translate-x-0 opacity-100" : "-translate-x-[110%] opacity-0"
           }`}
@@ -972,12 +985,14 @@ export default function Navbar() {
 
       {/* Desktop Sidebar (Floating Card) */}
       <aside
+        suppressHydrationWarning
         className={`hidden lg:flex fixed left-4 top-4 bottom-4 z-50 flex-col bg-white dark:bg-[#121212] border border-black/10 dark:border-white/10 rounded-[24px] shadow-2xl transition-all duration-300 overflow-hidden ${
-          isCollapsed ? "w-[88px]" : "w-[288px]"
-        }`}
-      >
-        {renderSidebarContent(isCollapsed, false)}
-      </aside>
-    </>
-  );
+          effectiveIsCollapsed ? "w-[88px]" : "w-[288px]" 
+      }`} 
+    > 
+
+        {renderSidebarContent(effectiveIsCollapsed, false)} 
+      </aside> 
+    </> 
+  ); 
 }

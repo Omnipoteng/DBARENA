@@ -11,16 +11,19 @@ import TopNewsSlider from "@/components/sections/top-news-slider";
 import { usePosts } from "@/components/post-store-provider";
 
 export default function HomePage() {
-  const { posts } = usePosts();
+  const { newsPosts } = usePosts();
 
   return (
-    <div className="db-home-shell min-h-screen bg-[#f4f4f2] text-black">
+    <div
+      suppressHydrationWarning
+      className="db-home-shell min-h-screen bg-[#f4f4f2] text-black"
+    >
       <Navbar />
-      <TopNewsSlider posts={posts} />
+      <TopNewsSlider posts={newsPosts} />
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-14 px-4 pb-20 pt-8 sm:px-6 lg:px-8 lg:gap-18 lg:pt-10">
         <HeroSection />
-        <FeaturedNews post={posts[0]} />
-        <NewsGrid posts={posts.slice(1)} />
+        <FeaturedNews post={newsPosts[0]} />
+        <NewsGrid posts={newsPosts.slice(1)} />
         <EventsSection />
         <GallerySection />
       </main>
