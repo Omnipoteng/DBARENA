@@ -697,13 +697,13 @@ export default function DashboardPage() {
         form.title || form.headline || form.term || form.name || form.character || "";
       const description =
         form.description || form.definition || form.debateUse || form.summary || form.caption || "";
-      const content = form.content || form.photoDescription || "";
-      const imageFallbackUrl = form.image || "/images/news banner.jpg";
+      const content = form.content || form.photoDescription || form.joinLink || "";
       const imageFile = uploadedFiles.photo || uploadedFiles.image || null;
       const date = form.date || new Date().toISOString().split("T")[0];
 
       if (!title.trim()) throw new Error("Judul tidak boleh kosong.");
       if (!description.trim()) throw new Error("Deskripsi tidak boleh kosong.");
+      if (!imageFile) throw new Error("Gambar wajib diupload. Pilih file foto terlebih dahulu.");
 
       const originMap: Record<DashboardCategoryKey, string> = {
         news: "news",
@@ -716,14 +716,13 @@ export default function DashboardPage() {
       };
       const origin = originMap[selectedCategory] ?? selectedCategory;
 
-        await publishPost({
-          title: title.trim(),
-          description: description.trim(),
-          content: content.trim(),
-          date,
-          origin,
-          imageFile,
-        imageFallbackUrl,
+      await publishPost({
+        title: title.trim(),
+        description: description.trim(),
+        content: content.trim(),
+        date,
+        origin,
+        imageFile,
       });
 
       setForm(getInitialForm(selectedCategory));

@@ -400,7 +400,7 @@ export async function loadSupabasePosts(fallbackPosts: Post[]) {
 
   const { data, error } = await supabase
     .from("posts")
-    .select("id,title,description,content,image_url,date")
+    .select("id,title,description,content,image_url,date,origin")
     .order("date", { ascending: false });
 
   if (error) {
@@ -431,6 +431,7 @@ export async function loadSupabasePosts(fallbackPosts: Post[]) {
     content: typeof post.content === "string" ? post.content : "",
     image: normalizeImageSrc(post.image_url),
     date: String(post.date),
+    origin: typeof post.origin === "string" ? post.origin : "custom",
   })) satisfies Post[];
 }
 
@@ -814,7 +815,7 @@ export async function loadSupabaseAllUsers(
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("user_key, display_name, email, role, status, is_muted, is_banned, notes, created_at, updated_at")
+    .select("user_key, display_name, role, status, is_muted, is_banned, notes, created_at, updated_at")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -828,7 +829,6 @@ export async function loadSupabaseAllUsers(
         fallbackUsers.map((user) => ({
           user_key: user.id,
           display_name: user.name,
-          email: user.email,
           role: user.role,
           status: user.status,
           is_muted: user.isMuted,
@@ -868,7 +868,7 @@ export async function loadSupabaseAllUsers(
     return {
       id: String(row.user_key),
       name: String(row.display_name || "Anonymous"),
-      email: String(row.email || ""),
+      email: "",
       role: (row.role || "scaler") as any,
       status: (row.status || "Active") as any,
       isMuted: Boolean(row.is_muted),
@@ -905,7 +905,7 @@ export async function updateSupabaseUserAccess(
   if (updates.is_banned !== undefined) payload.is_banned = updates.is_banned;
   if (updates.notes !== undefined) payload.notes = updates.notes;
   if (updates.display_name !== undefined) payload.display_name = updates.display_name;
-  if (updates.email !== undefined) payload.email = updates.email;
+  // Note: email column not queried (not in schema cache)
 
   const { data, error } = await supabase
     .from("profiles")
@@ -942,7 +942,6 @@ export async function createSupabaseUser(user: {
       {
         user_key: user.id,
         display_name: user.name,
-        email: user.email,
         role: user.role,
         notes: user.notes,
         status: user.status,
@@ -975,25 +974,40 @@ export async function uploadImageToStorage(
   folder: string = "uploads"
 ): Promise<string | null> {
   const supabase = getSupabaseBrowserClient();
-  if (!supabase) return null;
-
-  const ext = file.name.split(".").pop() ?? "jpg";
-  const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-
-  const { data, error } = await supabase.storage
-    .from("posts")
-    .upload(fileName, file, { upsert: false, cacheControl: "3600" });
-
-  if (error) {
-    console.error("Storage upload error:", error);
+  if (!supabase) {
+    console.error("[uploadImageToStorage] Supabase client tidak tersedia.");
     return null;
   }
 
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const filePath = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  console.log("[uploadImageToStorage] Memulai upload ke bucket \"post\"...");
+  console.log("[uploadImageToStorage] filePath:", filePath);
+  console.log("[uploadImageToStorage] File info:", { name: file.name, size: file.size, type: file.type });
+
+  const { data, error } = await supabase.storage
+    .from("post")
+    .upload(filePath, file, { upsert: false, cacheControl: "3600" });
+
+  if (error) {
+    console.error("[uploadImageToStorage] Upload GAGAL:", {
+      message: error.message,
+      name: error.name,
+    });
+    return null;
+  }
+
+  console.log("[uploadImageToStorage] Upload sukses. Storage path:", data.path);
+
   const { data: urlData } = supabase.storage
-    .from("posts")
+    .from("post")
     .getPublicUrl(data.path);
 
-  return urlData?.publicUrl ?? null;
+  const publicUrl = urlData?.publicUrl ?? null;
+  console.log("[uploadImageToStorage] publicUrl:", publicUrl);
+
+  return publicUrl;
 }
 
 /**
@@ -1013,27 +1027,48 @@ export async function insertSupabasePost(post: {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return null;
 
+  // Validate & sanitize — prevent undefined from reaching the DB
+  const title = (post.title ?? "").trim();
+  const description = (post.description ?? "").trim();
+  const content = (post.content ?? "").trim();
+  const image_url = (post.image_url ?? "").trim();
+  const date = (post.date ?? "").trim() || new Date().toISOString().split("T")[0];
+  const origin = (post.origin ?? "custom").trim();
+
+  if (!title) throw new Error("Judul tidak boleh kosong.");
+  if (!description) throw new Error("Deskripsi tidak boleh kosong.");
+  if (!image_url) throw new Error("Gambar belum diupload atau URL kosong.");
+
   const id = `post-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
   const { data, error } = await supabase
     .from("posts")
     .insert({
       id,
-      title: post.title,
-      description: post.description,
-      content: post.content ?? "",
-      image_url: post.image_url,
-      date: post.date,
-      origin: post.origin,
+      title,
+      description,
+      content,
+      image_url,
+      date,
+      origin,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .select("id,title,description,content,image_url,date")
+    .select("id,title,description,content,image_url,date,origin")
     .maybeSingle();
 
   if (error) {
-    console.error("Error inserting post:", error);
-    throw error;
+    console.error("insertSupabasePost error:", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
+    throw new Error(
+      `Gagal simpan ke database: ${error.message}` +
+      (error.hint ? ` — ${error.hint}` : "") +
+      ` (code: ${error.code})`
+    );
   }
 
   if (!data) return null;
@@ -1045,6 +1080,7 @@ export async function insertSupabasePost(post: {
     content: typeof data.content === "string" ? data.content : "",
     image: normalizeImageSrc(data.image_url),
     date: String(data.date),
+    origin: typeof data.origin === "string" ? data.origin : "custom",
   };
 }
 

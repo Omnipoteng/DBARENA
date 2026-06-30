@@ -5,4 +5,5 @@ export type Post = {
   content?: string;
   image: string;
   date: string;
+  origin?: string;
 };

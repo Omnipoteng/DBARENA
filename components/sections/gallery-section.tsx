@@ -3,6 +3,17 @@
 import React from "react";
 import Image from "next/image";
 import { useState } from "react";
+import { usePosts } from "@/components/post-store-provider";
+
+const gridClasses = [
+  "col-span-2 row-span-2",
+  "col-span-1 row-span-2",
+  "col-span-1 row-span-1",
+  "col-span-1 row-span-1",
+  "col-span-2 row-span-1",
+  "col-span-1 row-span-1",
+  "col-span-1 row-span-1",
+];
 
 const galleryImages = [
   {
@@ -71,7 +82,19 @@ const galleryImages = [
 ];
 
 export default function GallerySection() {
-  const [selectedImage, setSelectedImage] = useState<typeof galleryImages[0] | null>(null);
+  const { posts } = usePosts();
+
+  const dbGallery = posts.filter((p) => p.origin === "gallery");
+  const displayGallery = dbGallery.length > 0 ? dbGallery.map((p, index) => ({
+    src: p.image,
+    alt: p.title,
+    className: gridClasses[index % gridClasses.length],
+    title: p.title,
+    description: p.description,
+    date: p.date,
+  })) : galleryImages;
+
+  const [selectedImage, setSelectedImage] = useState<typeof displayGallery[0] | null>(null);
 
   return (
     <section id="gallery" className="py-2">
@@ -88,7 +111,7 @@ export default function GallerySection() {
       </div>
 
       <div className="grid auto-rows-[180px] grid-cols-2 gap-3 border-b border-black/10 pb-6 md:auto-rows-[230px] md:grid-cols-4">
-        {galleryImages.map((img, index) => (
+        {displayGallery.map((img, index) => (
           <div
             key={index}
             role="button"

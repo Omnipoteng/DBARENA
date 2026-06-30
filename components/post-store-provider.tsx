@@ -11,6 +11,7 @@ import {
 
 import {
   insertSupabasePost,
+  loadSupabasePosts,
   loadSupabasePostsByOrigin,
   uploadImageToStorage,
 } from "@/lib/supabase-store";
@@ -31,8 +32,7 @@ type PostStoreContextValue = {
     content?: string;
     date: string;
     origin: string;
-    imageFile?: File | null;
-    imageFallbackUrl?: string;
+    imageFile: File; // required — upload ke Supabase Storage wajib
   }) => Promise<Post>;
 };
 
@@ -43,11 +43,12 @@ export function PostStoreProvider({ children }: { children: ReactNode }) {
   const [newsPosts, setNewsPosts] = useState<Post[]>([]);
 
   const loadFromDb = useCallback(async () => {
-    // Hanya ambil posts dengan origin = "news" dari Supabase
-    // Tidak ada fallback ke data dummy — kalau kosong, tetap kosong
-    const newsRemote = await loadSupabasePostsByOrigin("news", []);
-    setNewsPosts(newsRemote);
-    setPosts(newsRemote);
+    // Load all posts from Supabase database
+    const remotePosts = await loadSupabasePosts([]);
+    setPosts(remotePosts);
+    // Filter news posts
+    const news = remotePosts.filter((p) => p.origin === "news");
+    setNewsPosts(news);
   }, []);
 
   useEffect(() => {
@@ -67,32 +68,36 @@ export function PostStoreProvider({ children }: { children: ReactNode }) {
     setNewsPosts((current) => [newEntry, ...current]);
   }
 
-  async function publishPost(params: {
+  type PublishPostParams = {
     title: string;
     description: string;
+    content?: string;
     date: string;
     origin: string;
-    imageFile?: File | null;
-    imageFallbackUrl?: string;
-  }): Promise<Post> {
-    let imageUrl = params.imageFallbackUrl ?? "";
+    imageFile: File; // Upload wajib — tidak ada fallback path lokal
+  };
 
-    if (params.imageFile) {
-      const uploaded = await uploadImageToStorage(
-        params.imageFile,
-        params.origin
+  async function publishPost(params: PublishPostParams): Promise<Post> {
+    // Upload gambar ke Supabase Storage bucket "post" — WAJIB
+    console.log("[publishPost] Uploading image file:", params.imageFile.name, "size:", params.imageFile.size);
+
+    const uploaded = await uploadImageToStorage(params.imageFile, params.origin);
+
+    if (!uploaded) {
+      throw new Error(
+        "Upload gambar gagal. Pastikan bucket \"post\" sudah ada dan bersifat Public di Supabase Storage."
       );
-      if (uploaded) {
-        imageUrl = uploaded;
-      }
     }
+
+    console.log("[publishPost] Upload berhasil. publicUrl:", uploaded);
+    console.log("[publishPost] image_url yang akan disimpan ke database:", uploaded);
 
     // Insert ke Supabase — langsung published, tanpa approval
     const inserted = await insertSupabasePost({
       title: params.title,
       description: params.description,
       content: params.content ?? "",
-      image_url: imageUrl || "/images/1.jpg",
+      image_url: uploaded, // selalu dari Storage, tidak pernah path lokal
       date: params.date,
       origin: params.origin,
     });
@@ -101,9 +106,8 @@ export function PostStoreProvider({ children }: { children: ReactNode }) {
       throw new Error("Gagal menyimpan ke database. Cek koneksi Supabase.");
     }
 
-    // Optimistic update — langsung tampil di homepage tanpa reload
-    setPosts((current) => [inserted, ...current]);
-    setNewsPosts((current) => [inserted, ...current]);
+    // Refresh posts from database
+    await loadFromDb();
 
     return inserted;
   }

@@ -14,9 +14,9 @@ const sliderImages = [
 ];
 
 export default function TopNewsSlider({ posts }: { posts: Post[] }) {
-  const slides = posts.slice(0, 4).map((post, index) => ({
+  const slides = posts.slice(0, 4).map((post) => ({
     ...post,
-    image: sliderImages[index] ?? post.image,
+    image: post.image,
   }));
   const extendedSlides =
     slides.length > 1

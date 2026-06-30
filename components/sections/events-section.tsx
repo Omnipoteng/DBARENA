@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePosts } from "@/components/post-store-provider";
 
 const eventsData = [
   {
@@ -30,7 +31,17 @@ const eventsData = [
 ];
 
 export default function EventsSection() {
-  const [selectedEvent, setSelectedEvent] = useState<typeof eventsData[0] | null>(null);
+  const { posts } = usePosts();
+
+  const dbEvents = posts.filter((p) => p.origin === "events");
+  const displayEvents = dbEvents.length > 0 ? dbEvents.map((p) => ({
+    title: p.title,
+    description: p.description,
+    date: p.date,
+    link: p.content || "https://discord.com"
+  })) : eventsData;
+
+  const [selectedEvent, setSelectedEvent] = useState<typeof displayEvents[0] | null>(null);
 
   return (
     <section id="events" className="py-2">
@@ -44,7 +55,7 @@ export default function EventsSection() {
       </div>
 
       <div className="grid gap-3">
-        {eventsData.map((event, index) => (
+        {displayEvents.map((event, index) => (
           <article
             key={index}
             className="grid gap-4 border-b border-black/10 py-5 transition duration-300 md:grid-cols-[120px_1fr_auto] md:items-center"
