@@ -1,10 +1,13 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link"; 
 import { useEffect, useState, useRef, type ReactNode } from "react"; 
 import { usePathname, useRouter } from "next/navigation";
 
 import { logoutCurrentUser } from "@/lib/auth-session";
+import { getSupabaseAuthClient } from "@/lib/supabase-auth";
+import { loadSupabaseProfileSnapshot } from "@/lib/supabase-store";
 
 const navItems = [
   {
@@ -347,8 +350,74 @@ export default function Navbar() {
   const [isOpen, setIsOpen] = useState(false);  
   const [isCollapsed, setIsCollapsed] = useState(false);  
   const [hasMounted, setHasMounted] = useState(false);
+  const [isDashDrawerOpen, setIsDashDrawerOpen] = useState(false);
   const pathname = usePathname(); 
   const router = useRouter(); 
+
+  const [profile, setProfile] = useState<{
+    displayName: string;
+    username: string;
+    avatarSrc: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadProfile = async () => {
+      const auth = getSupabaseAuthClient();
+      if (!auth) return;
+      
+      const { data: { session } } = await auth.auth.getSession();
+      if (cancelled) return;
+      if (session?.user) {
+        const snapshot = await loadSupabaseProfileSnapshot(session.user.id);
+        if (cancelled) return;
+        if (snapshot) {
+          setProfile({
+            displayName: snapshot.displayName || "Member",
+            username: snapshot.username || "member",
+            avatarSrc: snapshot.avatarSrc || "",
+          });
+        }
+      }
+    };
+    
+    void loadProfile();
+    
+    // Listen to custom profile-updated event
+    const handleProfileUpdate = () => {
+      void loadProfile();
+    };
+    window.addEventListener("profile-updated", handleProfileUpdate);
+    
+    // Also listen to auth changes to refresh
+    const auth = getSupabaseAuthClient();
+    let subscription: any = null;
+    if (auth) {
+      const { data } = auth.auth.onAuthStateChange(async (_event, session) => {
+        if (cancelled) return;
+        if (session?.user) {
+          const snapshot = await loadSupabaseProfileSnapshot(session.user.id);
+          if (cancelled) return;
+          if (snapshot) {
+            setProfile({
+              displayName: snapshot.displayName || "Member",
+              username: snapshot.username || "member",
+              avatarSrc: snapshot.avatarSrc || "",
+            });
+          }
+        } else {
+          setProfile(null);
+        }
+      });
+      subscription = data.subscription;
+    }
+    
+    return () => {
+      cancelled = true;
+      window.removeEventListener("profile-updated", handleProfileUpdate);
+      if (subscription) subscription.unsubscribe();
+    };
+  }, []); 
 
   // Floating mobile bubble gesture state
   const [bubbleX, setBubbleX] = useState(16);
@@ -532,29 +601,22 @@ export default function Navbar() {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
         setIsOpen(false);
+        setIsDashDrawerOpen(false);
       }
     }
-
     window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-    };
+    return () => { window.removeEventListener("keydown", handleKeyDown); };
   }, []);
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen && !isDashDrawerOpen) {
       document.body.style.overflow = "";
       return;
     }
-
     const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [isOpen]);
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [isOpen, isDashDrawerOpen]);
 
   const openDailyLogin = () => {
     window.dispatchEvent(new Event("open-daily-login"));
@@ -700,15 +762,19 @@ export default function Navbar() {
     }
   };
 
-  const generalLabels = ["Home", "Dashboard", "Profile", "Friends", "Leaderboard", "Ranked", "Community"];
+  // Dashboard is hidden from the mobile drawer's general list — it has its own dedicated panel
+  const generalLabels = ["Home", "Profile", "Friends", "Leaderboard", "Ranked", "Community"];
+  const generalLabelsMobile = ["Home", "Profile", "Friends", "Leaderboard", "Ranked", "Community"];
   const toolsLabels = ["DBA Token", "Marketplace", "Library", "Terminology", "Token", "Settings", "FAQ"];
   const updatesLabels = ["News", "Events", "Gallery"];
 
   const generalItems = drawerItems.filter((item) => generalLabels.includes(item.label));
+  const generalItemsMobile = drawerItems.filter((item) => generalLabelsMobile.includes(item.label));
   const toolsItems = drawerItems.filter((item) => toolsLabels.includes(item.label));
   const updatesItems = drawerItems.filter((item) => updatesLabels.includes(item.label));
 
   const renderSidebarContent = (isCollapsedView: boolean, isMobileView: boolean) => { 
+    const visibleGeneralItems = isMobileView ? generalItemsMobile : generalItems;
     return (
       <div suppressHydrationWarning className="flex flex-col h-full bg-white dark:bg-[#121212] text-black dark:text-white">
         {isCollapsedView ? ( 
@@ -768,30 +834,64 @@ export default function Navbar() {
 
         {isCollapsedView ? ( 
           <div className="flex flex-col items-center py-4 shrink-0 border-b border-black/8 dark:border-white/8">
-            <p className="text-[9px] uppercase tracking-[0.1em] font-semibold text-black/30 dark:text-white/30 mb-1">Stores</p>
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-black to-neutral-700 dark:from-white dark:to-neutral-300 text-white dark:text-black flex items-center justify-center font-bold text-base shadow-sm cursor-pointer hover:scale-105 transition duration-300">
-              D
-            </div>
-            <svg className="w-3 h-3 text-black/40 dark:text-white/40 mt-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-            </svg>
+            <Link
+              href="/profile"
+              onClick={() => setIsOpen(false)}
+              className="relative w-10 h-10 rounded-full border border-black/10 dark:border-white/10 overflow-hidden bg-black/5 dark:bg-white/5 flex items-center justify-center transition hover:scale-105"
+            >
+              {profile?.avatarSrc ? (
+                <Image
+                  src={profile.avatarSrc}
+                  alt={profile.displayName}
+                  fill
+                  sizes="40px"
+                  unoptimized
+                  className="object-cover"
+                />
+              ) : (
+                <span className="font-bold text-sm text-black dark:text-white">
+                  {(profile?.displayName || "M").charAt(0).toUpperCase()}
+                </span>
+              )}
+            </Link>
           </div>
         ) : (
           <div className="px-4 py-4 shrink-0 border-b border-black/8 dark:border-white/8">
-            <div className="flex items-center justify-between p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/5 border border-black/8 dark:border-white/8 cursor-pointer hover:bg-black/[0.06] dark:hover:bg-white/8 transition duration-300">
+            <Link
+              href="/profile"
+              onClick={() => setIsOpen(false)}
+              className="flex items-center justify-between p-2.5 rounded-2xl bg-black/[0.03] dark:bg-white/5 border border-black/8 dark:border-white/8 cursor-pointer hover:bg-black/[0.06] dark:hover:bg-white/8 transition duration-300 group"
+            >
               <div className="flex items-center gap-3 min-w-0">
-                <div className="w-9 h-9 shrink-0 rounded-xl bg-gradient-to-tr from-black to-neutral-700 dark:from-white dark:to-neutral-300 text-white dark:text-black flex items-center justify-center font-bold text-base shadow-sm">
-                  D
+                <div className="relative w-10 h-10 shrink-0 rounded-full border border-black/10 dark:border-white/10 overflow-hidden bg-black/5 dark:bg-white/5 flex items-center justify-center">
+                  {profile?.avatarSrc ? (
+                    <Image
+                      src={profile.avatarSrc}
+                      alt={profile.displayName}
+                      fill
+                      sizes="40px"
+                      unoptimized
+                      className="object-cover"
+                    />
+                  ) : (
+                    <span className="font-bold text-sm text-black dark:text-white">
+                      {(profile?.displayName || "M").charAt(0).toUpperCase()}
+                    </span>
+                  )}
                 </div>
                 <div className="min-w-0 text-left">
-                  <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-black/45 dark:text-white/45">Stores</p>
-                  <p className="text-sm font-bold text-black dark:text-white truncate leading-tight">DBARENA</p>
+                  <p className="text-sm font-bold text-black dark:text-white truncate leading-tight">
+                    {profile?.displayName || "Member"}
+                  </p>
+                  <p className="text-xs text-black/50 dark:text-white/50 truncate mt-0.5 font-medium leading-none">
+                    @{profile?.username || "member"}
+                  </p>
                 </div>
               </div>
-              <svg className="w-4 h-4 text-black/50 dark:text-white/50 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              <svg className="w-4 h-4 text-black/40 dark:text-white/40 shrink-0 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
               </svg>
-            </div>
+            </Link>
           </div>
         )}
 
@@ -802,7 +902,7 @@ export default function Navbar() {
                 General
               </p>
               <nav className="space-y-1">
-                {generalItems.map((item) => renderMenuItem(item, isCollapsedView))}
+                {visibleGeneralItems.map((item) => renderMenuItem(item, isCollapsedView))}
               </nav>
             </div>
           )}
@@ -835,7 +935,7 @@ export default function Navbar() {
 
   return (
     <>
-      {/* Mobile Top Header (Intact) */}
+      {/* Mobile Top Header */}
       <header suppressHydrationWarning className="sticky top-0 z-50 border-b border-black/8 bg-white/88 backdrop-blur-xl lg:hidden">
         <div suppressHydrationWarning className="mx-auto flex w-full max-w-7xl items-center justify-between px-4 py-3.5 sm:px-6">
           <Link
@@ -847,31 +947,36 @@ export default function Navbar() {
             </span>
           </Link>
 
-          <button
-            type="button"
-            onClick={() => setIsOpen((current) => !current)}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-black/10 bg-white text-black shadow-[0_8px_24px_rgba(0,0,0,0.05)] transition duration-300 hover:scale-105 hover:bg-black hover:text-white"
-            aria-expanded={isOpen}
-            aria-label="Toggle navigation menu"
-          >
-            <span className="flex flex-col gap-1.5">
-              <span
-                className={`block h-0.5 w-5 bg-current transition duration-300 ${
-                  isOpen ? "translate-y-2 rotate-45" : ""
-                }`}
-              />
-              <span
-                className={`block h-0.5 w-5 bg-current transition duration-300 ${
-                  isOpen ? "opacity-0" : ""
-                }`}
-              />
-              <span
-                className={`block h-0.5 w-5 bg-current transition duration-300 ${
-                  isOpen ? "-translate-y-2 -rotate-45" : ""
-                }`}
-              />
-            </span>
-          </button>
+          <div className="flex items-center gap-2">
+            {/* Dashboard shortcut button — mobile only */}
+            <button
+              type="button"
+              id="mobile-dashboard-drawer-btn"
+              onClick={() => { setIsDashDrawerOpen(true); setIsOpen(false); }}
+              className="inline-flex h-9 w-9 items-center justify-center rounded-[12px] border border-black/10 bg-white text-black shadow-[0_4px_12px_rgba(0,0,0,0.06)] transition duration-300 hover:bg-black hover:text-white"
+              aria-label="Open dashboard"
+            >
+              <svg className="w-4.5 h-4.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16v14H4z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 9h8M8 13h5" />
+              </svg>
+            </button>
+
+            {/* Hamburger */}
+            <button
+              type="button"
+              onClick={() => setIsOpen((current) => !current)}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-[14px] border border-black/10 bg-white text-black shadow-[0_8px_24px_rgba(0,0,0,0.05)] transition duration-300 hover:scale-105 hover:bg-black hover:text-white"
+              aria-expanded={isOpen}
+              aria-label="Toggle navigation menu"
+            >
+              <span className="flex flex-col gap-1.5">
+                <span className={`block h-0.5 w-5 bg-current transition duration-300 ${isOpen ? "translate-y-2 rotate-45" : ""}`} />
+                <span className={`block h-0.5 w-5 bg-current transition duration-300 ${isOpen ? "opacity-0" : ""}`} />
+                <span className={`block h-0.5 w-5 bg-current transition duration-300 ${isOpen ? "-translate-y-2 -rotate-45" : ""}`} />
+              </span>
+            </button>
+          </div>
         </div>
       </header>
 
@@ -983,6 +1088,87 @@ export default function Navbar() {
         </aside>
       </div>
 
+      {/* Mobile Drawer — Dashboard (dedicated panel, bottom sheet style) */}
+      <div
+        id="mobile-dashboard-drawer"
+        className={`lg:hidden fixed inset-0 z-[70] transition duration-300 ${
+          isDashDrawerOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0"
+        }`}
+        aria-hidden={!isDashDrawerOpen}
+      >
+        {/* Backdrop */}
+        <button
+          type="button"
+          onClick={() => setIsDashDrawerOpen(false)}
+          className="absolute inset-0 bg-black/50 backdrop-blur-[2px]"
+          aria-label="Close dashboard panel"
+        />
+
+        {/* Panel — slides up from bottom */}
+        <aside
+          className={`absolute bottom-0 left-0 right-0 flex flex-col bg-white dark:bg-[#121212] border-t border-black/10 dark:border-white/10 rounded-t-[24px] shadow-2xl transition-all duration-300 max-h-[85dvh] ${
+            isDashDrawerOpen ? "translate-y-0 opacity-100" : "translate-y-full opacity-0"
+          }`}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Dashboard panel"
+        >
+          {/* Handle bar */}
+          <div className="flex justify-center pt-3 pb-1 shrink-0">
+            <div className="w-10 h-1 rounded-full bg-black/15 dark:bg-white/20" />
+          </div>
+
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-3 shrink-0 border-b border-black/8 dark:border-white/8">
+            <div className="flex items-center gap-2.5">
+              <svg className="w-5 h-5 text-black dark:text-white" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16v14H4z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8 9h8M8 13h5" />
+              </svg>
+              <span className="font-sans text-[16px] font-black tracking-wider text-black dark:text-white">Dashboard</span>
+              <span className="px-2 py-0.5 rounded-md bg-black dark:bg-white text-[9px] font-bold text-white dark:text-black uppercase tracking-wider">Admin</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsDashDrawerOpen(false)}
+              className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-black/10 dark:border-white/10 bg-black/5 dark:bg-white/5 text-black/80 dark:text-white/80 hover:bg-black/10 dark:hover:bg-white/10 transition duration-300"
+              aria-label="Close dashboard panel"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Body */}
+          <div className="flex-1 overflow-y-auto no-scrollbar px-5 py-5">
+            <p className="text-xs text-black/40 dark:text-white/40 mb-4 leading-relaxed">
+              Panel ini khusus untuk admin. Buka halaman Dashboard untuk mengupload konten, mengelola berita, galeri, dan acara.
+            </p>
+
+            <Link
+              href="/dashboard"
+              onClick={() => setIsDashDrawerOpen(false)}
+              className="flex items-center gap-4 w-full p-4 rounded-2xl bg-black dark:bg-white text-white dark:text-black hover:opacity-90 active:scale-[0.98] transition-all duration-200 group"
+            >
+              <div className="w-10 h-10 shrink-0 rounded-xl bg-white/15 dark:bg-black/15 flex items-center justify-center">
+                <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16v14H4z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 9h8M8 13h5" />
+                </svg>
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-bold">Buka Dashboard</p>
+                <p className="text-xs opacity-60">Kelola konten, posting berita &amp; galeri</p>
+              </div>
+              <svg className="w-4 h-4 ml-auto opacity-60 group-hover:translate-x-0.5 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </div>
+        </aside>
+      </div>
+
       {/* Desktop Sidebar (Floating Card) */}
       <aside
         suppressHydrationWarning
@@ -990,7 +1176,6 @@ export default function Navbar() {
           effectiveIsCollapsed ? "w-[88px]" : "w-[288px]" 
       }`} 
     > 
-
         {renderSidebarContent(effectiveIsCollapsed, false)} 
       </aside> 
     </> 

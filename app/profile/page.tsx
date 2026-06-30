@@ -1334,7 +1334,9 @@ function ProfileContent({ user }: { user: User }) {
         highestRank,
         totalMatch,
         winRate,
-      }, user.id); 
+      }, user.id).then(() => {
+        window.dispatchEvent(new Event("profile-updated"));
+      }); 
     } catch { 
       // ignore storage quota issues so profile edits don't break 
     } 
