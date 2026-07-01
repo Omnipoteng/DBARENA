@@ -13,6 +13,8 @@ import { THEME_COOKIE, readThemeCookieValue } from "@/lib/site-preferences";
 
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 const coolvetica = localFont({
   src: "./fonts/Coolvetica-Regular.woff2",
