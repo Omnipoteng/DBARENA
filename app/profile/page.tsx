@@ -23,6 +23,7 @@ import {
   loadSupabaseRankedMatches,
   loadSupabaseSocialCounts,
   saveSupabaseProfileSnapshot,
+  uploadImageToStorage,
 } from "@/lib/supabase-store";
 
 type BorderKey = "none" | "legend" | "mythic" | "apex";
@@ -427,6 +428,7 @@ function EditorModal({
   const [draftCustomSkinColors, setDraftCustomSkinColors] = useState<string[]>(customSkinColors);
   const draftBannerFileRef = useRef<File | null>(null);
   const [draftBannerObjectUrl, setDraftBannerObjectUrl] = useState<string | null>(null);
+  const [draftMaxVideoDuration, setDraftMaxVideoDuration] = useState(10);
   const [cropTargetUrl, setCropTargetUrl] = useState<string | null>(null);
   const [uploadProgress, setUploadProgress] = useState<{
     target: "avatar" | "banner";
@@ -480,17 +482,17 @@ function EditorModal({
     const isVideo = target === "banner" && file.type.startsWith("video/");
 
     if (isVideo) {
-      // Check duration before opening cropper — reject videos longer than 10 seconds.
+      // Check duration before opening cropper — reject videos longer than configured limits.
       const tempUrl = URL.createObjectURL(file);
       const tempEl = document.createElement("video");
       tempEl.preload = "metadata";
       tempEl.src = tempUrl;
       tempEl.onloadedmetadata = () => {
         URL.revokeObjectURL(tempUrl);
-        if (tempEl.duration > 10) {
+        if (tempEl.duration > draftMaxVideoDuration) {
           setUploadProgress({
             target: "banner",
-            label: "Video terlalu panjang! Maksimal 10 detik.",
+            label: `Video terlalu panjang! Maksimal ${draftMaxVideoDuration} detik.`,
             progress: 100,
           });
           window.setTimeout(() => setUploadProgress(null), 3500);
@@ -519,6 +521,7 @@ function EditorModal({
         if (typeof reader.result === "string") {
           setCropTargetUrl(reader.result);
           setDraftBannerKind("image");
+          draftBannerFileRef.current = file; // Store the original file reference!
         }
       };
       reader.readAsDataURL(file);
@@ -633,6 +636,13 @@ function EditorModal({
                         loop
                         muted
                         playsInline
+                        style={{
+                          ...(draftBannerCrop ? {
+                            objectPosition: `${draftBannerCrop.x}% ${draftBannerCrop.y}%`,
+                            transform: draftBannerCrop.zoom > 1 ? `scale(${draftBannerCrop.zoom})` : undefined,
+                            transformOrigin: `${draftBannerCrop.x}% ${draftBannerCrop.y}%`,
+                          } : {}),
+                        }}
                       />
                     ) : (
                       <Image
@@ -642,6 +652,13 @@ function EditorModal({
                         sizes="(max-width: 768px) 100vw, 400px"
                         unoptimized
                         className="object-cover"
+                        style={{
+                          ...(draftBannerCrop ? {
+                            objectPosition: `${draftBannerCrop.x}% ${draftBannerCrop.y}%`,
+                            transform: draftBannerCrop.zoom > 1 ? `scale(${draftBannerCrop.zoom})` : undefined,
+                            transformOrigin: `${draftBannerCrop.x}% ${draftBannerCrop.y}%`,
+                          } : {}),
+                        }}
                       />
                     )
                   ) : (
@@ -711,6 +728,20 @@ function EditorModal({
                 <p className="text-[10px] uppercase tracking-[0.3em] text-black/35">
                   Bisa upload foto atau video untuk banner
                 </p>
+                <div className="mt-1 flex items-center justify-between gap-3 rounded-xl border border-black/10 bg-black/[0.02] p-3">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-[0.2em] font-semibold text-black/45">Batas Durasi Video</p>
+                    <p className="text-[11px] text-black/50">Tentukan batas maksimal durasi video (detik)</p>
+                  </div>
+                  <input
+                    type="number"
+                    min={1}
+                    max={180}
+                    value={draftMaxVideoDuration}
+                    onChange={(e) => setDraftMaxVideoDuration(Math.max(1, Number(e.target.value)))}
+                    className="w-16 rounded-lg border border-black/15 bg-white px-2 py-1 text-center text-xs font-semibold text-black outline-none focus:border-black/30"
+                  />
+                </div>
               </div>
               <div className="grid gap-2">
                 <span className="text-[10px] uppercase tracking-[0.3em] text-black/40 sm:text-xs">Profile photo</span>
@@ -772,29 +803,16 @@ function EditorModal({
                   mediaSrc={cropTargetUrl}
                   mediaType={draftBannerKind}
                   onCancel={() => setCropTargetUrl(null)}
-                  onCropImage={(croppedBase64) => {
+                  onCropImage={({ cropX, cropY, cropZoom }) => {
                     setCropTargetUrl(null);
-                    setUploadProgress({
-                      target: "banner",
-                      label: "Mengunggah hasil crop banner",
-                      progress: 0,
-                    });
-                    let progress = 0;
-                    const interval = setInterval(() => {
-                      progress += 20;
-                      setUploadProgress({
-                        target: "banner",
-                        label: "Mengunggah hasil crop banner",
-                        progress: Math.min(100, progress),
-                      });
-                      if (progress >= 100) {
-                        clearInterval(interval);
-                        setDraftBannerKind("image");
-                        setDraftBanner(croppedBase64);
-                        draftBannerFileRef.current = null;
-                        setTimeout(() => setUploadProgress(null), 300);
-                      }
-                    }, 60);
+                    setDraftBannerCrop({ x: cropX, y: cropY, zoom: cropZoom });
+                    setDraftBannerKind("image");
+                    const file = draftBannerFileRef.current;
+                    if (file) {
+                      const previewUrl = URL.createObjectURL(file);
+                      setDraftBanner(previewUrl);
+                      setDraftBannerObjectUrl(previewUrl);
+                    }
                   }}
                   onCropVideo={({ cropX, cropY, cropZoom }) => {
                     setCropTargetUrl(null);
@@ -1032,7 +1050,7 @@ function EditorModal({
                             bannerCrop: draftBannerCrop,
                             tags: draftTags,
                             website: draftWebsite,
-                            bannerFile: draftBannerKind === "video" ? draftBannerFileRef.current : null,
+                            bannerFile: draftBannerFileRef.current,
                           }
                         : mode === "border"
                           ? { border: draftBorder }
@@ -1442,9 +1460,9 @@ function ProfileContent({ user }: { user: User }) {
       <main className="w-full flex flex-col pb-16">
         {/* Banner Section - Edge-to-Edge */}
         <div className="relative w-full h-44 sm:h-60 md:h-72 lg:h-80 bg-zinc-900 overflow-hidden border-b border-zinc-200">
-          {bannerKind === "video" && bannerPreviewUrl ? (
+          {bannerKind === "video" && (bannerPreviewUrl || bannerSrc) ? (
             <video
-              src={bannerPreviewUrl}
+              src={bannerPreviewUrl || bannerSrc}
               className="absolute inset-0 h-full w-full object-cover"
               autoPlay
               loop
@@ -1466,7 +1484,15 @@ function ProfileContent({ user }: { user: User }) {
               sizes="100vw"
               unoptimized
               className="object-cover"
-              style={{ objectPosition: bannerSrc.startsWith("data:") ? "50% 50%" : `50% ${bannerFocus}%` }}
+              style={{
+                ...(bannerCrop ? {
+                  objectPosition: `${bannerCrop.x}% ${bannerCrop.y}%`,
+                  transform: bannerCrop.zoom > 1 ? `scale(${bannerCrop.zoom})` : undefined,
+                  transformOrigin: `${bannerCrop.x}% ${bannerCrop.y}%`,
+                } : {
+                  objectPosition: bannerSrc.startsWith("data:") ? "50% 50%" : `50% ${bannerFocus}%`,
+                }),
+              }}
             />
           ) : (
             <div className="absolute inset-0 bg-gradient-to-r from-zinc-950 via-zinc-800 to-zinc-950" />
@@ -2056,26 +2082,46 @@ function ProfileContent({ user }: { user: User }) {
               if (next.bannerKind === "video") {
                 if (next.bannerFile) {
                   try {
-                    // Save the ORIGINAL uncompressed file — no re-encoding, preserves all fps/quality.
-                    await saveProfileBannerVideo(next.bannerFile);
-                    const previewUrl = URL.createObjectURL(next.bannerFile);
-                    setBannerPreviewUrl(previewUrl);
-                    setBannerSrc(getProfileBannerVideoKey());
-                    setBannerKind("video");
+                    // Upload the ORIGINAL uncompressed video file to Supabase Storage.
+                    const publicUrl = await uploadImageToStorage(next.bannerFile, "banners");
+                    if (publicUrl) {
+                      setBannerSrc(publicUrl);
+                      setBannerPreviewUrl(null);
+                      setBannerKind("video");
+                    } else {
+                      throw new Error("Gagal mengunggah video banner.");
+                    }
                   } catch (error) {
-                    console.error("Failed to save video banner:", error);
-                    alert(`Gagal menyimpan video: ${error instanceof Error ? error.message : "Unknown error"}`);
+                    console.error("Failed to upload video banner:", error);
+                    alert(`Gagal mengunggah video: ${error instanceof Error ? error.message : "Unknown error"}`);
                   }
                 } else {
                   setBannerKind("video");
                 }
                 // Always update crop params when video banner is applied.
                 if (next.bannerCrop !== undefined) setBannerCrop(next.bannerCrop ?? null);
-              } else if (typeof next.bannerSrc === "string") {
-                setBannerSrc(next.bannerSrc);
-                setBannerPreviewUrl(null);
-                setBannerKind("image");
-                setBannerCrop(null);
+              } else if (next.bannerKind === "image") {
+                if (next.bannerFile) {
+                  try {
+                    // Upload the ORIGINAL full resolution image file to Supabase Storage.
+                    const publicUrl = await uploadImageToStorage(next.bannerFile, "banners");
+                    if (publicUrl) {
+                      setBannerSrc(publicUrl);
+                      setBannerPreviewUrl(null);
+                      setBannerKind("image");
+                    } else {
+                      throw new Error("Gagal mengunggah banner.");
+                    }
+                  } catch (error) {
+                    console.error("Failed to upload banner image:", error);
+                    alert(`Gagal mengunggah banner: ${error instanceof Error ? error.message : "Unknown error"}`);
+                  }
+                } else if (typeof next.bannerSrc === "string") {
+                  setBannerSrc(next.bannerSrc);
+                  setBannerPreviewUrl(null);
+                  setBannerKind("image");
+                }
+                if (next.bannerCrop !== undefined) setBannerCrop(next.bannerCrop ?? null);
               }
               if (typeof next.bannerFocus === "number") setBannerFocus(next.bannerFocus);
               if (Array.isArray(next.tags)) setTags(next.tags);

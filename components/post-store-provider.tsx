@@ -33,6 +33,7 @@ type PostStoreContextValue = {
     date: string;
     origin: string;
     imageFile: File; // required — upload ke Supabase Storage wajib
+    isHighlight?: boolean;
   }) => Promise<Post>;
 };
 
@@ -75,6 +76,7 @@ export function PostStoreProvider({ children }: { children: ReactNode }) {
     date: string;
     origin: string;
     imageFile: File; // Upload wajib — tidak ada fallback path lokal
+    isHighlight?: boolean;
   };
 
   async function publishPost(params: PublishPostParams): Promise<Post> {
@@ -100,6 +102,7 @@ export function PostStoreProvider({ children }: { children: ReactNode }) {
       image_url: uploaded, // selalu dari Storage, tidak pernah path lokal
       date: params.date,
       origin: params.origin,
+      is_highlight: params.isHighlight,
     });
 
     if (!inserted) {

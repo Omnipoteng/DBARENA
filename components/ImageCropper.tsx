@@ -3,7 +3,9 @@ import React, { useState, useRef, useEffect } from "react";
 interface ImageCropperProps {
   mediaSrc: string;
   mediaType: "image" | "video";
-  onCropImage: (croppedImageBase64: string) => void;
+  // Both image and video return the same crop params — no canvas re-encoding, no quality loss.
+  // The original file is uploaded at full resolution; crop is applied via CSS at render time.
+  onCropImage: (crop: { cropX: number; cropY: number; cropZoom: number }) => void;
   // cropX/cropY: 0-100% — which point of the original video appears at the center of the banner.
   // cropZoom: 1-5 — additional zoom multiplier on top of object-fit cover scale.
   onCropVideo: (crop: { cropX: number; cropY: number; cropZoom: number }) => void;
@@ -149,52 +151,19 @@ export default function ImageCropper({
   };
 
   const handleSave = async () => {
+    // Both image and video use the same normalized crop-coordinate approach.
+    // No canvas re-encoding — the original file is uploaded at full quality.
+    // CSS objectPosition + scale will apply the crop at render time.
+    const totalScale = scale * minScale;
+    const cropX = Math.max(0, Math.min(100, ((naturalWidth / 2) - (x / totalScale)) / naturalWidth * 100));
+    const cropY = Math.max(0, Math.min(100, ((naturalHeight / 2) - (y / totalScale)) / naturalHeight * 100));
+    const cropZoom = scale;
+
     if (mediaType === "video") {
-      // Convert raw pixel offsets → normalized CSS-compatible percentages.
-      // totalScale = how many pixels in the display match one natural video pixel.
-      const totalScale = scale * minScale;
-      // Which percentage point of the video is at the center of the viewport?
-      const cropX = Math.max(0, Math.min(100, ((naturalWidth / 2) - (x / totalScale)) / naturalWidth * 100));
-      const cropY = Math.max(0, Math.min(100, ((naturalHeight / 2) - (y / totalScale)) / naturalHeight * 100));
-      onCropVideo({ cropX, cropY, cropZoom: scale });
-      return;
+      onCropVideo({ cropX, cropY, cropZoom });
+    } else {
+      onCropImage({ cropX, cropY, cropZoom });
     }
-
-    if (!imgRef.current) return;
-
-    const img = imgRef.current;
-    const canvas = document.createElement("canvas");
-    canvas.width = 1200; // Output width
-    canvas.height = 300; // Output height (4:1 ratio)
-    const ctx = canvas.getContext("2d");
-
-    if (!ctx) return;
-
-    // Scale parameter (relative scale * minScale)
-    const s = scale * minScale;
-
-    // Viewport width and height in original source image space
-    const cropWNatural = cropWidth / s;
-    const cropHNatural = cropHeight / s;
-
-    // Translate translation coordinates from UI space to original image space
-    const sourceX = (img.naturalWidth / 2) - (cropWNatural / 2) - (x / s);
-    const sourceY = (img.naturalHeight / 2) - (cropHNatural / 2) - (y / s);
-
-    ctx.drawImage(
-      img,
-      sourceX,
-      sourceY,
-      cropWNatural,
-      cropHNatural,
-      0,
-      0,
-      1200,
-      300
-    );
-
-    const croppedBase64 = canvas.toDataURL("image/jpeg", 0.9);
-    onCropImage(croppedBase64);
   };
 
   // Compute CSS values for image container

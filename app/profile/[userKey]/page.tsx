@@ -225,6 +225,13 @@ export default function VisitorProfilePage() {
                 loop
                 muted
                 playsInline
+                style={{
+                  ...(profile.bannerCrop ? {
+                    objectPosition: `${profile.bannerCrop.x}% ${profile.bannerCrop.y}%`,
+                    transform: profile.bannerCrop.zoom > 1 ? `scale(${profile.bannerCrop.zoom})` : undefined,
+                    transformOrigin: `${profile.bannerCrop.x}% ${profile.bannerCrop.y}%`,
+                  } : {}),
+                }}
               />
             ) : bannerSrc ? (
               <Image
@@ -234,7 +241,15 @@ export default function VisitorProfilePage() {
                 sizes="(max-width: 1024px) 100vw, 1280px"
                 unoptimized
                 className="object-cover"
-                style={{ objectPosition: `50% ${profile.bannerFocus}%` }}
+                style={{
+                  ...(profile.bannerCrop ? {
+                    objectPosition: `${profile.bannerCrop.x}% ${profile.bannerCrop.y}%`,
+                    transform: profile.bannerCrop.zoom > 1 ? `scale(${profile.bannerCrop.zoom})` : undefined,
+                    transformOrigin: `${profile.bannerCrop.x}% ${profile.bannerCrop.y}%`,
+                  } : {
+                    objectPosition: `50% ${profile.bannerFocus}%`,
+                  }),
+                }}
               />
             ) : (
               <div className="absolute inset-0 bg-[linear-gradient(135deg,_#111111_0%,_#d9d9d7_45%,_#f7f5ef_100%)]" />

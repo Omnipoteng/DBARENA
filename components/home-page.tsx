@@ -16,6 +16,14 @@ export default function HomePage() {
   const sliderPosts = posts.filter((p) => p.origin === "slider");
   const displaySliderPosts = sliderPosts.length > 0 ? sliderPosts : newsPosts;
 
+  // Find custom highlight or default to the newest post
+  const highlightPost = newsPosts.find((p) => p.is_highlight) || newsPosts[0];
+
+  // News list excludes highlightPost to prevent duplicates
+  const remainingNewsPosts = highlightPost
+    ? newsPosts.filter((p) => p.id !== highlightPost.id)
+    : newsPosts;
+
   return (
     <div
       suppressHydrationWarning
@@ -25,8 +33,8 @@ export default function HomePage() {
       <TopNewsSlider posts={displaySliderPosts} />
       <main className="mx-auto flex w-full max-w-7xl flex-col gap-14 px-4 pb-20 pt-8 sm:px-6 lg:px-8 lg:gap-18 lg:pt-10">
         <HeroSection />
-        <FeaturedNews post={newsPosts[0]} />
-        <NewsGrid posts={newsPosts.slice(1)} />
+        <FeaturedNews post={highlightPost} />
+        <NewsGrid posts={remainingNewsPosts} />
         <EventsSection />
         <GallerySection />
       </main>

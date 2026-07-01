@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { loadSupabaseAllUsers, updateSupabaseUserAccess, createSupabaseUser } from "@/lib/supabase-store";
+import { loadSupabaseAllUsers, updateSupabaseUserAccess, createSupabaseUser, createSupabasePoll } from "@/lib/supabase-store";
 import { usePosts } from "@/components/post-store-provider";
+import type { ContentBlock } from "@/types/post";
+import BlockEditor, { type BlockWithId } from "@/components/news-block-editor";
 
 type DashboardCategoryKey =
   | "news_slider"
@@ -499,6 +501,8 @@ export default function DashboardPage() {
   const [form, setForm] = useState<Record<string, string>>(
     getInitialForm("news"),
   );
+  const [isHighlight, setIsHighlight] = useState(false);
+  const [newsBlocks, setNewsBlocks] = useState<BlockWithId[]>([]);
   const [filePreviews, setFilePreviews] = useState<Record<string, string>>({});
   const [uploadedFiles, setUploadedFiles] = useState<Record<string, File>>({});
   const [draftSavedAt, setDraftSavedAt] = useState<string | null>(null);
@@ -639,6 +643,8 @@ export default function DashboardPage() {
   function handleCategoryChange(category: DashboardCategoryKey) {
     setSelectedCategory(category);
     setForm(getInitialForm(category));
+    setIsHighlight(false);
+    setNewsBlocks([]);
     setFilePreviews({});
     setUploadedFiles({});
     setDraftSavedAt(null);
@@ -697,7 +703,6 @@ export default function DashboardPage() {
         form.title || form.headline || form.term || form.name || form.character || "";
       const description =
         form.description || form.definition || form.debateUse || form.summary || form.caption || "";
-      const content = form.content || form.photoDescription || form.joinLink || "";
       const imageFile = uploadedFiles.photo || uploadedFiles.image || null;
       const date = form.date || new Date().toISOString().split("T")[0];
 
@@ -716,15 +721,40 @@ export default function DashboardPage() {
       };
       const origin = originMap[selectedCategory] ?? selectedCategory;
 
+      // For news category: resolve blocks (create polls for voting blocks)
+      let contentString: string = form.content || form.photoDescription || form.joinLink || "";
+
+      if (selectedCategory === "news" && newsBlocks.length > 0) {
+        // Resolve poll IDs for voting blocks before serializing
+        const resolvedBlocks: ContentBlock[] = await Promise.all(
+          newsBlocks.map(async (block) => {
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            const { _id, ...rest } = block;
+            if (rest.type === "voting") {
+              const validOptions = rest.options.filter((o) => o.trim());
+              if (validOptions.length >= 2 && rest.question.trim()) {
+                const pollId = await createSupabasePoll(rest.question.trim(), validOptions);
+                if (pollId) return { ...rest, poll_id: pollId, options: validOptions };
+              }
+            }
+            return rest as ContentBlock;
+          })
+        );
+        contentString = JSON.stringify(resolvedBlocks);
+      }
+
       await publishPost({
         title: title.trim(),
         description: description.trim(),
-        content: content.trim(),
+        content: contentString,
         date,
         origin,
         imageFile,
+        isHighlight,
       });
 
+      setIsHighlight(false);
+      setNewsBlocks([]);
       setForm(getInitialForm(selectedCategory));
       setFilePreviews({});
       setUploadedFiles({});
@@ -2508,6 +2538,36 @@ export default function DashboardPage() {
                     {renderField(field)}
                   </label>
                 ))}
+
+                {selectedCategory === "news" && (
+                  <section className="mt-2 space-y-3 rounded-2xl border border-black/8 bg-black/[0.02] p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-black/40">Block Editor</p>
+                        <p className="mt-0.5 text-sm text-black/55">Susun konten artikel dengan blok-blok yang fleksibel</p>
+                      </div>
+                      <span className="rounded-full bg-black px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white">
+                        {newsBlocks.length} blok
+                      </span>
+                    </div>
+                    <BlockEditor blocks={newsBlocks} onChange={setNewsBlocks} />
+                  </section>
+                )}
+
+                {selectedCategory === "news" && (
+                  <label className="flex items-center gap-3 rounded-xl border border-black/10 bg-black/[0.02] p-3 cursor-pointer select-none transition hover:bg-black/[0.04] mt-1">
+                    <input
+                      type="checkbox"
+                      checked={isHighlight}
+                      onChange={(event) => setIsHighlight(event.target.checked)}
+                      className="h-4 w-4 rounded border-black/20 text-black focus:ring-black"
+                    />
+                    <div className="text-left">
+                      <p className="text-sm font-semibold text-black">Jadikan Highlight Homepage</p>
+                      <p className="text-xs text-black/50 font-normal">Postingan ini akan diposisikan paling atas sebagai update utama pada homepage.</p>
+                    </div>
+                  </label>
+                )}
 
                 {isLibraryCategory && activeCategory?.statFields ? (
                   <section className="mt-2 grid gap-4 rounded-2xl border border-black/8 bg-black/[0.02] p-4 sm:p-5">

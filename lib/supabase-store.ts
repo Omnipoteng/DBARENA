@@ -400,8 +400,8 @@ export async function loadSupabasePosts(fallbackPosts: Post[]) {
 
   const { data, error } = await supabase
     .from("posts")
-    .select("id,title,description,content,image_url,date,origin")
-    .order("date", { ascending: false });
+    .select("id,title,description,content,image_url,date,origin,is_highlight")
+    .order("created_at", { ascending: false });
 
   if (error) {
     return fallbackPosts;
@@ -417,6 +417,7 @@ export async function loadSupabasePosts(fallbackPosts: Post[]) {
         image_url: post.image,
         date: post.date,
         origin: "seed",
+        is_highlight: Boolean(post.is_highlight),
       })),
       { onConflict: "id" },
     );
@@ -432,6 +433,7 @@ export async function loadSupabasePosts(fallbackPosts: Post[]) {
     image: normalizeImageSrc(post.image_url),
     date: String(post.date),
     origin: typeof post.origin === "string" ? post.origin : "custom",
+    is_highlight: Boolean(post.is_highlight),
   })) satisfies Post[];
 }
 
@@ -511,6 +513,7 @@ export async function saveSupabasePosts(posts: Post[]) {
       image_url: post.image,
       date: post.date,
       origin: "custom",
+      is_highlight: Boolean(post.is_highlight),
       updated_at: new Date().toISOString(),
     })),
     { onConflict: "id" },
@@ -1023,6 +1026,7 @@ export async function insertSupabasePost(post: {
   image_url: string;
   date: string;
   origin: string;
+  is_highlight?: boolean;
 }): Promise<Post | null> {
   const supabase = getSupabaseBrowserClient();
   if (!supabase) return null;
@@ -1034,10 +1038,22 @@ export async function insertSupabasePost(post: {
   const image_url = (post.image_url ?? "").trim();
   const date = (post.date ?? "").trim() || new Date().toISOString().split("T")[0];
   const origin = (post.origin ?? "custom").trim();
+  const is_highlight = Boolean(post.is_highlight);
 
   if (!title) throw new Error("Judul tidak boleh kosong.");
   if (!description) throw new Error("Deskripsi tidak boleh kosong.");
   if (!image_url) throw new Error("Gambar belum diupload atau URL kosong.");
+
+  // If this post is set as highlight, update all existing posts to is_highlight = false
+  if (is_highlight) {
+    const { error: resetError } = await supabase
+      .from("posts")
+      .update({ is_highlight: false })
+      .eq("is_highlight", true);
+    if (resetError) {
+      console.error("Error resetting existing highlights:", resetError);
+    }
+  }
 
   const id = `post-${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -1051,10 +1067,11 @@ export async function insertSupabasePost(post: {
       image_url,
       date,
       origin,
+      is_highlight,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
-    .select("id,title,description,content,image_url,date,origin")
+    .select("id,title,description,content,image_url,date,origin,is_highlight")
     .maybeSingle();
 
   if (error) {
@@ -1081,6 +1098,7 @@ export async function insertSupabasePost(post: {
     image: normalizeImageSrc(data.image_url),
     date: String(data.date),
     origin: typeof data.origin === "string" ? data.origin : "custom",
+    is_highlight: Boolean(data.is_highlight),
   };
 }
 
@@ -1097,7 +1115,7 @@ export async function loadSupabasePostsByOrigin(
 
   const { data, error } = await supabase
     .from("posts")
-    .select("id,title,description,content,image_url,date")
+    .select("id,title,description,content,image_url,date,is_highlight")
     .eq("origin", origin)
     .order("created_at", { ascending: false });
 
@@ -1115,5 +1133,147 @@ export async function loadSupabasePostsByOrigin(
     content: typeof post.content === "string" ? post.content : "",
     image: normalizeImageSrc(post.image_url),
     date: String(post.date),
+    is_highlight: Boolean(post.is_highlight),
   })) satisfies Post[];
+}
+
+export async function createSupabasePoll(question: string, options: string[]): Promise<string | null> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return null;
+
+  const { data: pollData, error: pollError } = await supabase
+    .from("polls")
+    .insert({ question })
+    .select("id")
+    .maybeSingle();
+
+  if (pollError || !pollData) {
+    console.error("Error creating poll:", pollError);
+    return null;
+  }
+
+  const pollId = pollData.id;
+
+  const optionsToInsert = options.map((opt, index) => ({
+    poll_id: pollId,
+    option_text: opt,
+    position: index,
+  }));
+
+  const { error: optionsError } = await supabase
+    .from("poll_options")
+    .insert(optionsToInsert);
+
+  if (optionsError) {
+    console.error("Error creating poll options:", optionsError);
+    return null;
+  }
+
+  return pollId;
+}
+
+export type PollDetailsOption = {
+  id: string;
+  option_text: string;
+  votes_count: number;
+};
+
+export type PollDetails = {
+  id: string;
+  question: string;
+  options: PollDetailsOption[];
+  totalVotes: number;
+  hasVoted: boolean;
+  votedOptionId?: string;
+};
+
+export async function fetchSupabasePollDetails(pollId: string, currentUserKey?: string): Promise<PollDetails | null> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return null;
+
+  // Fetch poll question
+  const { data: poll, error: pollError } = await supabase
+    .from("polls")
+    .select("id, question")
+    .eq("id", pollId)
+    .maybeSingle();
+
+  if (pollError || !poll) {
+    console.error("Error fetching poll:", pollError);
+    return null;
+  }
+
+  // Fetch options
+  const { data: options, error: optionsError } = await supabase
+    .from("poll_options")
+    .select("id, option_text, position")
+    .eq("poll_id", pollId)
+    .order("position", { ascending: true });
+
+  if (optionsError || !options) {
+    console.error("Error fetching poll options:", optionsError);
+    return null;
+  }
+
+  // Fetch all votes for this poll
+  const { data: votes, error: votesError } = await supabase
+    .from("poll_votes")
+    .select("option_id, user_key")
+    .eq("poll_id", pollId);
+
+  if (votesError || !votes) {
+    console.error("Error fetching poll votes:", votesError);
+    return null;
+  }
+
+  const totalVotes = votes.length;
+  const userVote = currentUserKey ? votes.find((v) => v.user_key === currentUserKey) : null;
+  const hasVoted = Boolean(userVote);
+  const votedOptionId = userVote?.option_id;
+
+  // Build options count map
+  const optionVotesMap: Record<string, number> = {};
+  options.forEach((opt) => {
+    optionVotesMap[opt.id] = 0;
+  });
+  votes.forEach((vote) => {
+    if (optionVotesMap[vote.option_id] !== undefined) {
+      optionVotesMap[vote.option_id]++;
+    }
+  });
+
+  const pollOptions: PollDetailsOption[] = options.map((opt) => ({
+    id: opt.id,
+    option_text: opt.option_text,
+    votes_count: optionVotesMap[opt.id] || 0,
+  }));
+
+  return {
+    id: poll.id,
+    question: poll.question,
+    options: pollOptions,
+    totalVotes,
+    hasVoted,
+    votedOptionId,
+  };
+}
+
+export async function castSupabasePollVote(pollId: string, optionId: string, userKey: string): Promise<boolean> {
+  const supabase = getSupabaseBrowserClient();
+  if (!supabase) return false;
+
+  const { error } = await supabase
+    .from("poll_votes")
+    .insert({
+      poll_id: pollId,
+      option_id: optionId,
+      user_key: userKey,
+    });
+
+  if (error) {
+    console.error("Error casting poll vote:", error);
+    return false;
+  }
+
+  return true;
 }
